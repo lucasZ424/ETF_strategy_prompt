@@ -1,13 +1,13 @@
-#################################################################################
+﻿#################################################################################
 # ETF Price Forecasting Project
 #
 # Premature pipeline:
-# 1. Webcrawling for ETF price history (Yahoo finance is ideal, but for this project, try China Financial market price).
+# 1. Webcrawling (Yahoo Finance API) for ETF price history (Use multiple representative China ETFs for training, e.g., 510300.SS and 510050.SS; use SPY, QQQ, IEUR for cross-market feature engineering with strict no-lookahead time alignment).
 # 2. Data Cleaning; visualization; feature engineeing; ready to pass in to the model in .csv format.
 # 3. Train, validation, test set spliting ratio?(Set as hyperparameter, for Bayesian tuning)
 # 4. Model selection: currently we have XGBoost, MLP as baseline model option (more to be explored browse the web to find more experimental algorithms).
 # 5. Predict Open-to-prev-close gap (log return). Back test with past years' trading data. 
-#    (Personal thought: avoid COVID-19 period due to unusual volitality, but do include Russian-Ukraine War)
+#    (Personal thought updated: keep COVID-19 and other high-volatility regimes in data, then report performance by regime, including Russian-Ukraine War period)
 #
 #
 # Advanced thoughts:
@@ -20,10 +20,10 @@
 Phase 1: Data retreival
 
 Yahoo finance API 
---> store the data in dataframe, for current phase only focus on ETF in China market. Do consider other stock for Feature Engineering. 
+--> store the data in dataframe, for current phase focus on ETF in China market and train on multiple representative China ETFs. Do consider EU/US ETFs for cross-market Feature Engineering with strict timezone/calendar alignment (no lookahead). 
 --> reformulate the data structure after downloading.
 --> Data cleaning and feature engineering (We can try to construct a dummy volitality mitrix, don't have to be strictly correct).
---> Introduce GRA? To be researched.
+--> Introduce GRA (Grey relational analysis)
 --> Integrate into .csv format
 
 Phase 2: Data loader
@@ -39,3 +39,11 @@ Phase 3: Train model
 --> Use the best model for dashboard prediction.
 
 Phase 4: To be continued
+
+Open Universe Design (for website deployment)
+--> Keep feature schema ID-agnostic (do not rely on ETF one-hot identity as core feature).
+--> For each prediction request, require fixed input columns and minimum lookback history (e.g., 60 trading days).
+--> If history is insufficient, return "not_enough_history" instead of forced prediction.
+--> Keep EU/US cross-market features lagged and aligned by China decision timestamp (strict no-lookahead).
+--> Validate generalization by leave-one-ETF-out tests to simulate unseen ETF inference.
+

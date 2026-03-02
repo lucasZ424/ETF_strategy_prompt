@@ -1,0 +1,41 @@
+#################################################################################
+# ETF Price Forecasting Project
+#
+# Premature pipeline:
+# 1. Webcrawling for ETF price history (Yahoo finance is ideal, but for this project, try China Financial market price).
+# 2. Data Cleaning; visualization; feature engineeing; ready to pass in to the model in .csv format.
+# 3. Train, validation, test set spliting ratio?(Set as hyperparameter, for Bayesian tuning)
+# 4. Model selection: currently we have XGBoost, MLP as baseline model option (more to be explored browse the web to find more experimental algorithms).
+# 5. Predict Open-to-prev-close gap (log return). Back test with past years' trading data. 
+#    (Personal thought: avoid COVID-19 period due to unusual volitality, but do include Russian-Ukraine War)
+#
+#
+# Advanced thoughts:
+# 1. Use the Premature pipeline as the backend logic, build a website (or alternatively use Grafana to build an online dashbard), 
+#    which enable users to interact with the forcast flow. Give out buy/sell strategies, for crediability we can demo with past 7 trading days Sharpe Ratio diagram. 
+#    Design details (UI, functionality, ect.)
+# 2. More advanced thought: Automate model updating progress, for each financial season, retrain the model to fit in the current market trend.
+#################################################################################
+
+Phase 1: Data retreival
+
+Yahoo finance API 
+--> store the data in dataframe, for current phase only focus on ETF in China market. Do consider other stock for Feature Engineering. 
+--> reformulate the data structure after downloading.
+--> Data cleaning and feature engineering (We can try to construct a dummy volitality mitrix, don't have to be strictly correct).
+--> Introduce GRA? To be researched.
+--> Integrate into .csv format
+
+Phase 2: Data loader
+--> Set splition ratio as hyperparameter, later logged into arguements.
+--> Train loader, validation loader and test loader implementation.
+--> Load and ready to train.
+
+Phase 3: Train model
+--> XGBoost &/ MLP For 1 step ahead, try XGBoost first.
+--> Metrixes (MSE, R^2, RMSE, MAE)
+--> Hyperparameter tuning, Bayesian with pruning.
+--> Compare performance
+--> Use the best model for dashboard prediction.
+
+Phase 4: To be continued

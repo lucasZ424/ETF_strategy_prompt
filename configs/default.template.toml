@@ -1,0 +1,50 @@
+﻿[project]
+name = "etf-forecasting"
+timezone = "Asia/Shanghai"
+seed = 42
+
+[data]
+universe = ["510300.SS", "510500.SS"]
+source = "yfinance"
+start_date = "2015-01-01"
+end_date = "2025-12-31"
+raw_dir = "data/raw"
+interim_dir = "data/interim"
+processed_dir = "data/processed"
+
+[target]
+# open_to_prev_close_log_return means log(open_t / close_t-1)
+definition = "open_to_prev_close_log_return"
+horizon = 1
+
+[split]
+method = "walk_forward"
+train_ratio = 0.7
+valid_ratio = 0.15
+test_ratio = 0.15
+
+[features]
+include_macro = false
+lookback_windows = [5, 10, 20]
+
+[model]
+family = "xgboost"
+objective = "reg:squarederror"
+
+[tuning]
+enabled = true
+method = "bayesian"
+trials = 50
+pruning = true
+
+[backtest]
+initial_cash = 1000000.0
+fee_bps = 5.0
+slippage_bps = 3.0
+max_gross_leverage = 1.0
+rebalance = "1D"
+
+[dashboard]
+enabled = false
+host = "127.0.0.1"
+port = 8050

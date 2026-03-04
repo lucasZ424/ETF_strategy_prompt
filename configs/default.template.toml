@@ -26,6 +26,7 @@ test_ratio = 0.15
 [features]
 include_macro = false
 lookback_windows = [5, 10, 20]
+top_k_features = 20
 
 [model]
 family = "xgboost"

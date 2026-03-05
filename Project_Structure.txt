@@ -9,11 +9,24 @@
 # 5. Predict Open-to-prev-close gap (log return). Back test with past years' trading data. 
 # 
 #
-# Advanced thoughts:
-# 1. Use the Premature pipeline as the backend logic, build a website (or alternatively use Grafana to build an online dashbard), 
+# Advanced thoughts (Ignore for now):
+# 1. Use the Premature pipeline as the backend logic, build a website (or alternatively use Grafana to build an online dashboard), 
 #    which enable users to interact with the forcast flow. Give out buy/sell strategies, for crediability we can demo with past 7 trading days Sharpe Ratio diagram. 
 #    Design details (UI, functionality, ect.)
 # 2. More advanced thought: Automate model updating progress, for each financial season, retrain the model to fit in the current market trend.
+# 3. Improve the simple 1-day buy/sell strategy prompt, adopt other regression time series forcasting models like iTransformer/LSTM.
+#    This enable multi steps ahead prediction, which can incooperate risk management, portfolio design, and maybe, even simulation mechanism.
+#    Then this the model will be capable of prompting more sophisticated strategies like hold and sell, go short, leverage ect.
+#
+# Further implementation (Ignore for now):
+# 1. Enable portfolio formation and risk management functionality. Implement different portfolio optimization approach to deal with different market condition and customer preferences.
+#    For instance, MIN(mean_variance) for resession, MAX(Sharpe_ratio) for risk lovers, MAX(Leveraged_Sharpe_ratio) for market booming. Use Webcrawling and sentiment analysis for macro market trend detection.
+# 2. Implement risk management
+# 3. Implement reinforcement learning simulation for longe time asset holding strategy (need discussion)
+# 4. Upgrade Grafana dashboard to actual website to satisfy complex interaction
+# 
+# Final Upgrade (do it when I lost my mind)
+# ***Implement dummy AI Agent to provide investment suggestion and sentiment detection***
 #################################################################################
 
 Phase 1: Data retreival
@@ -21,7 +34,7 @@ Phase 1: Data retreival
 Yahoo finance API 
 --> Store the data in dataframe, for current phase focus on ETF in China market and train on multiple representative China ETFs. Do consider EU/US ETFs for cross-market Feature Engineering with strict timezone/calendar alignment (no lookahead).
     For universal application, multiple Chinese ETFs are selected for comprehensive representation(510050,510300,510500,159915,588000). Cross market ETFs covering US&EU (SPY,QQQ,IEUR).
---> reformulate the data structure after downloading. Yfinance can sometimes give out ill structured data. Question to be disgussed: Data fetch time window range automation given futrue model auto update design.
+--> reformulate the data structure after downloading. Yfinance can sometimes give out ill structured data. Question to be discussed: Data fetch time window range automation given futrue model auto update design.
 --> Data cleaning and feature engineering (We can try to construct a dummy volitality mitrix, don't have to be strictly correct).
     Cleaning: Due to hoilday difference between the US and China market, use statistical imputation on US&EU related columns to avoid dropping core Chinese market info. DO NOT IMPUTE NAN CELLS in CORE CHINESE ETFs, DROP them directly.
     Possible features:
@@ -39,9 +52,17 @@ Phase 3: Train model
 --> Metrixes (MSE, R^2, RMSE, MAE)
 --> Hyperparameter tuning, Bayesian with pruning.
 --> Compare performance
---> Use the best model for dashboard prediction.
+--> Save the best model for dashboard prediction.
 
-Phase 4: To be continued
+Phase 4: Local test for strategy integrity.
+--> Write scripts to perform a test trade run to prove prompt credibility (Visualize Equity Curve, Calculate eventual return Sharpe Ratio and CAGR for evaluation)
+--> Perform white reality check for statistical integrity.
+
+Phase 5: Frontend development Grafana
+--> Dashboard 1: Real time price change trend line diagram (if doable).
+--> Dashboard 2: ETFs predicted return Table for top five ETFs
+--> Dashboard 3: With user selection, display pretiction result and corresponding strategy prompt.
+--> To be continued if better thoughts obtained.
 
 Open Universe Design (for website deployment)
 --> Keep feature schema ID-agnostic (do not rely on ETF one-hot identity as core feature).

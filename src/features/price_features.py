@@ -67,7 +67,8 @@ def add_volume_features(df: pd.DataFrame, windows: List[int]) -> pd.DataFrame:
     """vol_change, vol_zscore, vol_ma_ratio — lagged by 1."""
     df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
     lagged_vol = df.groupby("symbol")["volume"].shift(1)
-    df["vol_change"] = lagged_vol / df.groupby("symbol")["volume"].shift(2)
+    prev2_vol = df.groupby("symbol")["volume"].shift(2).replace(0, float("nan"))
+    df["vol_change"] = (lagged_vol / prev2_vol).replace([float("inf"), float("-inf")], float("nan")).fillna(1.0)
     for w in windows:
         ma = df.groupby("symbol")["volume"].transform(
             lambda s, _w=w: s.shift(1).rolling(_w, min_periods=_w).mean()

@@ -8,19 +8,30 @@ start_date = "2015-01-01"
 end_date = "2025-12-31"
 
 # Minimal representative China ETF core universe for pooled training.
-universe_core = ["510050.SS", "510300.SS", "510500.SS", "159915.SZ"]
-
-# Optional extension with shorter history, useful for innovation/STAR exposure.
-universe_optional = ["588000.SS"]
+universe_core = ["510050.SS", "510300.SS", "510500.SS", "159915.SZ", "588000.SS"]
+universe_optional = []
 
 # Cross-market context features (lagged and timezone-aligned to China decision time).
 cross_market_features = ["SPY", "QQQ", "IEUR"]
+
+[features]
+lookback_windows = [5, 10, 20]
+# top_k_features = 30  # GRA-GRG screening: select top k features; remove this line to keep all
 
 [target]
 definition = "open_to_prev_close_log_return"
 horizon = 1
 
+[model]
+train_ratio = 0.70
+val_ratio = 0.15
+test_ratio = 0.15
+optuna_trials = 100
+early_stopping_patience = 10
+model_dir = "models"
+output_dir = "outputs"
+
 [open_universe]
 enabled = true
 min_history_rows = 60
-required_base_columns = ["date", "symbol", "open", "high", "low", "close", "volume"]
+required_base_columns = ["date", "symbol", "open", "high", "low", "close", "adj close", "volume"]

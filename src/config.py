@@ -28,6 +28,23 @@ class PipelineConfig:
     top_k_features: int | None = None  # GRA-GRG screening; None = keep all
 
 
+@dataclass(frozen=True)
+class ModelConfig:
+    """Configuration for model training and evaluation."""
+
+    train_ratio: float = 0.70
+    val_ratio: float = 0.15
+    test_ratio: float = 0.15
+    optuna_trials: int = 100
+    early_stopping_patience: int = 10
+    signal_threshold_search: List[float] = field(
+        default_factory=lambda: [round(x * 0.0005, 4) for x in range(1, 41)]
+    )
+    model_dir: str = "models"
+    output_dir: str = "outputs"
+    seed: int = 42
+
+
 def load_config(path: Path) -> PipelineConfig:
     """Parse a TOML file and return a PipelineConfig."""
 
@@ -59,4 +76,27 @@ def load_config(path: Path) -> PipelineConfig:
         target_definition=tgt.get("definition", "open_to_prev_close_log_return"),
         target_horizon=tgt.get("horizon", 1),
         top_k_features=feat.get("top_k_features", None),
+    )
+
+
+def load_model_config(path: Path) -> ModelConfig:
+    """Parse [model] section from TOML and return ModelConfig."""
+
+    raw_bytes = path.read_bytes()
+    if raw_bytes.startswith(b"\xef\xbb\xbf"):
+        raw_bytes = raw_bytes[3:]
+    raw = tomllib.loads(raw_bytes.decode("utf-8"))
+
+    m = raw.get("model", {})
+    seed = m.get("seed", raw.get("project", {}).get("seed", 42))
+
+    return ModelConfig(
+        train_ratio=m.get("train_ratio", 0.70),
+        val_ratio=m.get("val_ratio", 0.15),
+        test_ratio=m.get("test_ratio", 0.15),
+        optuna_trials=m.get("optuna_trials", 100),
+        early_stopping_patience=m.get("early_stopping_patience", 10),
+        model_dir=m.get("model_dir", "models"),
+        output_dir=m.get("output_dir", "outputs"),
+        seed=seed,
     )

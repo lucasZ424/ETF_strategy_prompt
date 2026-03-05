@@ -1,0 +1,41 @@
+{
+  "train": {
+    "mse": 6.378145189592924e-05,
+    "rmse": 0.007986329062587469,
+    "mae": 0.00433134205132668,
+    "r2": 0.9852585245402513,
+    "directional_accuracy": 0.8515535097813579,
+    "n_samples": 7821
+  },
+  "val": {
+    "mse": 8.727735590246807e-05,
+    "rmse": 0.009342235059260073,
+    "mae": 0.006191391784221839,
+    "r2": 0.9056235297402508,
+    "directional_accuracy": 0.7817721518987342,
+    "n_samples": 1975
+  },
+  "test": {
+    "mse": 0.00013844499968200473,
+    "rmse": 0.011766265324307655,
+    "mae": 0.006750094398884928,
+    "r2": 0.6833035519800059,
+    "directional_accuracy": 0.7556675062972292,
+    "n_samples": 1985
+  },
+  "best_params": {
+    "learning_rate": 0.005646437171300292,
+    "max_depth": 9,
+    "n_estimators": 1065,
+    "subsample": 0.9963236027687689,
+    "colsample_bytree": 0.9567870963530495,
+    "reg_alpha": 0.2316807852091502,
+    "reg_lambda": 0.00013460734088518997,
+    "min_child_weight": 7
+  },
+  "signal_config": {
+    "long_threshold": 0.0185,
+    "short_threshold": -0.0185
+  },
+  "version_tag": "xgboost_30ft_t70_v15_esp10"
+}

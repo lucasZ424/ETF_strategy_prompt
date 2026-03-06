@@ -64,9 +64,9 @@ def main() -> None:
     for ticker in CHINA_ETFS:
         frame = fetch_one(ticker, START_DATE, END_DATE)
         frame.to_csv(china_dir / f"{ticker}.csv", index=False)
-        rows.append(_summarize(frame, ticker, ticker in CHINA_ETFS))
+        rows.append(_summarize(frame, ticker))
 
-    summary = pd.DataFrame(rows).sort_values("ticker", ascending=[False, True])
+    summary = pd.DataFrame(rows).sort_values("ticker")
     summary.to_csv(china_dir / "selection_summary.csv", index=False)
     print("=== China ETFs ===")
     print(summary.to_string(index=False))
@@ -79,7 +79,7 @@ def main() -> None:
     for ticker in CROSS_MARKET_ETFS:
         frame = fetch_one(ticker, START_DATE, END_DATE)
         frame.to_csv(cross_dir / f"{ticker}.csv", index=False)
-        cross_rows.append(_summarize(frame, ticker, is_core=False))
+        cross_rows.append(_summarize(frame, ticker))
 
     cross_summary = pd.DataFrame(cross_rows).sort_values("ticker")
     cross_summary.to_csv(cross_dir / "selection_summary.csv", index=False)

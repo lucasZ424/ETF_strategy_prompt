@@ -45,6 +45,35 @@ class ModelConfig:
     seed: int = 42
 
 
+@dataclass(frozen=True)
+class BacktestConfig:
+    """Configuration for backtest simulation."""
+
+    initial_cash: float = 1_000_000.0
+    fee_bps: float = 5.0
+    slippage_bps: float = 3.0
+    max_gross_leverage: float = 1.0
+    risk_free_rate: float = 0.02
+
+
+def load_backtest_config(path: Path) -> BacktestConfig:
+    """Parse [backtest] section from TOML and return BacktestConfig."""
+
+    raw_bytes = path.read_bytes()
+    if raw_bytes.startswith(b"\xef\xbb\xbf"):
+        raw_bytes = raw_bytes[3:]
+    raw = tomllib.loads(raw_bytes.decode("utf-8"))
+
+    b = raw.get("backtest", {})
+    return BacktestConfig(
+        initial_cash=b.get("initial_cash", 1_000_000.0),
+        fee_bps=b.get("fee_bps", 5.0),
+        slippage_bps=b.get("slippage_bps", 3.0),
+        max_gross_leverage=b.get("max_gross_leverage", 1.0),
+        risk_free_rate=b.get("risk_free_rate", 0.02),
+    )
+
+
 def load_config(path: Path) -> PipelineConfig:
     """Parse a TOML file and return a PipelineConfig."""
 

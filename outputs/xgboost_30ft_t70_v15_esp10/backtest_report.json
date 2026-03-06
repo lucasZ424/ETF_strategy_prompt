@@ -1,0 +1,36 @@
+{
+  "metrics": {
+    "initial_cash": 1000000.0,
+    "final_value": 1172273.83,
+    "total_return_pct": 17.2274,
+    "cagr_pct": 10.262,
+    "sharpe_ratio": 0.5071,
+    "max_drawdown_pct": 19.5973,
+    "max_drawdown_duration_days": 240,
+    "win_rate_pct": 50.0,
+    "total_trades": 960,
+    "total_fees": 19972.76,
+    "total_slippage": 11983.57,
+    "n_trading_days": 397
+  },
+  "assumptions": {
+    "initial_cash": 1000000.0,
+    "fee_bps": 5.0,
+    "slippage_bps": 3.0,
+    "max_gross_leverage": 1.0,
+    "risk_free_rate": 0.02,
+    "execution_model": "Open price + slippage",
+    "mark_to_market": "Close price",
+    "rebalance": "Daily",
+    "position_sizing": "Equal weight across active signals",
+    "holding_period": "1 day",
+    "test_period": "2024-05-10 to 2025-12-30",
+    "symbols": [
+      "159915.SZ",
+      "510050.SS",
+      "510300.SS",
+      "510500.SS",
+      "588000.SS"
+    ]
+  }
+}

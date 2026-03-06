@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Protocol, Sequence
+from typing import Any, Dict, List, Protocol, Sequence
 
 
 class Signal(Enum):
@@ -64,10 +64,10 @@ class BacktestConfig:
 class BacktestResult:
     """Container for simulation outputs."""
 
-    equity_curve: List[float]
+    equity_curve: List[Any]  # List of (date, float) tuples
     returns: List[float]
     trades: List[Trade]
-    metadata: Dict[str, float]
+    metadata: Dict[str, Any]
 
 
 class Strategy(Protocol):

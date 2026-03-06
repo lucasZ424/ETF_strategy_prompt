@@ -16,7 +16,7 @@ cross_market_features = ["SPY", "QQQ", "IEUR"]
 
 [features]
 lookback_windows = [5, 10, 20]
-# top_k_features = 30  # GRA-GRG screening: select top k features; remove this line to keep all
+top_k_features = 30  # GRA-GRG screening: select top k features; remove this line to keep all
 
 [target]
 definition = "open_to_prev_close_log_return"
@@ -30,6 +30,13 @@ optuna_trials = 100
 early_stopping_patience = 10
 model_dir = "models"
 output_dir = "outputs"
+
+[backtest]
+initial_cash = 1000000.0
+fee_bps = 5.0
+slippage_bps = 3.0
+max_gross_leverage = 1.0
+risk_free_rate = 0.02
 
 [open_universe]
 enabled = true

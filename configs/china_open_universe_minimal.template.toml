@@ -33,12 +33,15 @@ output_dir = "outputs"
 
 [backtest]
 initial_cash = 1000000.0
+# Production: fee_bps = 5.0, slippage_bps = 3.0
+# Temporarily 0 for pure model performance visualization
 fee_bps = 5.0
 slippage_bps = 3.0
 max_gross_leverage = 1.0
-risk_free_rate = 0.02
+risk_free_rate = 0.0179
 
 [open_universe]
 enabled = true
 min_history_rows = 60
-required_base_columns = ["date", "symbol", "open", "high", "low", "close", "adj close", "volume"]
+# Internal column names after loader normalization (raw "Adj Close" -> "adj_close")
+required_base_columns = ["date", "symbol", "open", "high", "low", "close", "adj_close", "volume"]

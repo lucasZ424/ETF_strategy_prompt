@@ -1,0 +1,108 @@
+Feature Engineering Summary (v2)
+===============================
+
+Design update:
+- Forecast target moved to forward 5-day log return.
+- Cross-market and macro context block is preserved as-is.
+- Non-cross-market sections are compacted to reduce redundancy and improve
+  generalization to unseen ETFs.
+- Feature selection now uses a two-stage workflow:
+  1. Pearson correlation filter on non-cross-market features.
+  2. XGBoost importance ranking on validation results.
+
+Status legend:
+  [keep]     Core feature retained in compact design
+  [screen]   Candidate survives only if correlation/importance screening passes
+  [drop]     Removed from compact baseline due to redundancy or weak stability
+  [fixed]    Preserved by design in current project phase
+
+-------------------------------------------------------------------------------
+Category              Feature Name              Status    Module / Note
+--------------------- ------------------------- --------- ----------------------
+Volatility            Rolling Std (10)          [keep]    volatility.py
+Volatility            ATR (Avg True Range)      [keep]    volatility.py
+Volatility            Realized Volatility (20)  [keep]    volatility.py
+Volatility            Squared Return (r^2)      [drop]    redundant vs realized vol
+Volatility            Absolute Return           [drop]    redundant vs ATR/std
+Volatility            Rolling Std (5)           [drop]    too short / overlapping
+Volatility            Rolling Std (20)          [screen]  keep only if not redundant
+Volatility            GARCH Conditional Vol     [drop]    expensive, marginal gain
+-------------------------------------------------------------------------------
+Momentum              1-day Return              [keep]    price_features.py
+Momentum              5-day Return              [keep]    price_features.py
+Momentum              20-day Return             [keep]    add in price_features.py
+Momentum              3-day Return              [drop]    overlapping with 1d/5d
+Momentum              10-day Momentum           [screen]  keep only if val gain is stable
+-------------------------------------------------------------------------------
+Mean Reversion        Z-Score                   [keep]    price_features.py
+Mean Reversion        Price - Rolling Mean      [drop]    redundant transform
+Mean Reversion        Price / Rolling Mean      [drop]    redundant transform
+-------------------------------------------------------------------------------
+Volume                Volume Z-Score            [keep]    price_features.py
+Volume                Volume MA Ratio           [keep]    price_features.py
+Volume                Volume Change             [drop]    weak and overlapping
+-------------------------------------------------------------------------------
+Gap Features          Previous Gap              [screen]  keep only if robust OOS
+Gap Features          Mean Gap (3 days)         [drop]    weak for 5-day target baseline
+-------------------------------------------------------------------------------
+Cross-Market          SPY Return Lag            [fixed]   cross_market.py
+Cross-Market          QQQ Return Lag            [fixed]   cross_market.py
+Cross-Market          IEUR Return Lag           [fixed]   cross_market.py
+Cross-Market          Relative Return           [fixed]   builder.py
+-------------------------------------------------------------------------------
+Global Risk           VIX Change (vix_chg)      [fixed]   cross_market.py via ^VIX
+Global Risk           US 10Y chg (us10y_chg)    [fixed]   cross_market.py via ^TNX
+Global Risk           DXY log ret (dxy_ret)     [fixed]   cross_market.py via DX-Y.NYB
+-------------------------------------------------------------------------------
+Calendar              Month                     [screen]  keep only if stable
+Calendar              Day of Week               [drop]    usually weak / unstable
+Calendar              Quarter                   [drop]    low incremental value
+-------------------------------------------------------------------------------
+Volatility Scaling    5d Return / ATR           [keep]    add in price_features.py
+Volatility Scaling    5d Return / Rolling Std   [keep]    add in price_features.py
+Volatility Scaling    1d Return / ATR           [drop]    less aligned to new target
+Volatility Scaling    1d Return / Rolling Std   [drop]    less aligned to new target
+-------------------------------------------------------------------------------
+
+Compact baseline feature set (non-cross-market)
+----------------------------------------------
+1. Rolling Std (10)
+2. ATR (Avg True Range)
+3. Realized Volatility (20)
+4. 1-day Return
+5. 5-day Return
+6. 20-day Return
+7. Z-Score
+8. Volume Z-Score
+9. Volume MA Ratio
+10. 5d Return / ATR
+11. 5d Return / Rolling Std
+
+Preserved cross-market + macro block
+------------------------------------
+1. SPY Return Lag
+2. QQQ Return Lag
+3. IEUR Return Lag
+4. Relative Return
+5. VIX Change (vix_chg)
+6. US 10Y chg (us10y_chg)
+7. DXY log ret (dxy_ret)
+
+Feature selection implementation logic
+--------------------------------------
+A. Pearson correlation filter
+- Apply only to non-cross-market features in the training set.
+- Compute pairwise Pearson correlations.
+- If |corr| >= threshold (recommended start: 0.90 or 0.95), remove one feature
+  from the pair based on interpretability and later validation utility.
+
+B. XGBoost importance ranking
+- Train baseline XGBoost on the filtered feature set.
+- Rank features using validation-based importance analysis.
+- Keep features that show stable usefulness across validation windows and,
+  ideally, across leave-one-ETF-out splits.
+
+C. Practical note
+- The compact baseline is the default starting point.
+- [screen] features may be reintroduced only if they improve validation and
+  out-of-sample robustness rather than only in-sample fit.

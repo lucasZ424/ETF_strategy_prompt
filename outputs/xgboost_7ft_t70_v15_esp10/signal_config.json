@@ -1,6 +1,0 @@
-{
-  "long_threshold": 0.01,
-  "short_threshold": -0.01,
-  "criterion": "directional_accuracy",
-  "criterion_value": 0.9958018471872376
-}

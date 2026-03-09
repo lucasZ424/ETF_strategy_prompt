@@ -39,8 +39,19 @@ def compute_backtest_metrics(
 ) -> BacktestMetrics:
     """Compute performance metrics from backtest results."""
     initial = metadata["initial_cash"]
-    final = metadata["final_value"]
-    n_days = metadata["n_trading_days"]
+    final = metadata.get("final_value", initial)
+    n_days = metadata.get("n_trading_days", 0)
+
+    if not equity_curve or n_days == 0:
+        return BacktestMetrics(
+            initial_cash=initial, final_value=initial,
+            total_return_pct=0.0, cagr_pct=0.0, sharpe_ratio=0.0,
+            max_drawdown_pct=0.0, max_drawdown_duration_days=0,
+            win_rate_pct=0.0, total_trades=int(metadata.get("total_trades", 0)),
+            total_fees=metadata.get("total_fees", 0.0),
+            total_slippage=metadata.get("total_slippage", 0.0),
+            n_trading_days=0,
+        )
 
     total_return = (final / initial - 1) * 100
 

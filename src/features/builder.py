@@ -30,6 +30,7 @@ def build_all_features(
     cross_market_aligned: pd.DataFrame,
     lookback_windows: List[int],
     top_k_features: int | None = None,
+    cross_symbols: List[str] | None = None,
 ) -> pd.DataFrame:
     """Build all features and target in correct dependency order.
 
@@ -60,7 +61,8 @@ def build_all_features(
     df = df.merge(cross_market_aligned, on="date", how="left")
 
     # Relative returns: China 1d return minus each cross-market ETF return
-    for xm in ["spy", "qqq", "ieur"]:
+    xm_list = [s.lower() for s in (cross_symbols or [])]
+    for xm in xm_list:
         ret_col = f"{xm}_ret"
         if ret_col in df.columns:
             df[f"rel_ret_{xm}"] = df["ret_1d"] - df[ret_col]

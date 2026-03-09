@@ -1,4 +1,4 @@
-﻿"""Interfaces and core data structures for backtesting."""
+"""Interfaces and core data structures for backtesting."""
 
 from __future__ import annotations
 
@@ -51,16 +51,6 @@ class Trade:
 
 
 @dataclass
-class BacktestConfig:
-    """Backtest simulation configuration."""
-
-    initial_cash: float = 1_000_000.0
-    fee_bps: float = 5.0
-    slippage_bps: float = 3.0
-    max_gross_leverage: float = 1.0
-
-
-@dataclass
 class BacktestResult:
     """Container for simulation outputs."""
 
@@ -74,19 +64,6 @@ class Strategy(Protocol):
     """Maps forecasts to target weights at each rebalance timestamp."""
 
     def target_weights(self, as_of: datetime, forecasts: Sequence[Forecast]) -> Dict[str, float]:
-        ...
-
-
-class BacktestEngine(Protocol):
-    """Runs the backtest loop with market bars and forecast inputs."""
-
-    def run(
-        self,
-        bars: Sequence[MarketBar],
-        forecasts: Sequence[Forecast],
-        strategy: Strategy,
-        config: BacktestConfig,
-    ) -> BacktestResult:
         ...
 
 

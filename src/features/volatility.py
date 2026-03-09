@@ -37,22 +37,16 @@ def add_volatility_features(
             lambda s, _w=w: (s**2).rolling(_w, min_periods=_w).sum().pipe(np.sqrt)
         )
 
-    # ATR via TA-Lib: compute on raw OHLC, then shift result by 1
+    # ATR via TA-Lib: compute on raw OHLC per symbol, then shift by 1
     for w in windows:
-        atr_raw = df.groupby("symbol", group_keys=False).apply(
-            lambda g, _w=w: pd.Series(
-                talib.ATR(
-                    g["high"].values,
-                    g["low"].values,
-                    g["adj_close"].values,
-                    timeperiod=_w,
-                ),
-                index=g.index,
+        atr_parts = []
+        for _, g in df.groupby("symbol"):
+            atr_vals = talib.ATR(
+                g["high"].values, g["low"].values,
+                g["adj_close"].values, timeperiod=w,
             )
-        )
-        df[f"atr_{w}"] = df.groupby("symbol")[atr_raw.name if hasattr(atr_raw, 'name') else 0].shift(1) if False else None
-        # Assign raw then shift
-        df[f"_atr_raw_{w}"] = atr_raw.values
+            atr_parts.append(pd.Series(atr_vals, index=g.index))
+        df[f"_atr_raw_{w}"] = pd.concat(atr_parts).sort_index()
         df[f"atr_{w}"] = df.groupby("symbol")[f"_atr_raw_{w}"].shift(1)
         df = df.drop(columns=[f"_atr_raw_{w}"])
 

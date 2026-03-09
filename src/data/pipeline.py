@@ -50,6 +50,7 @@ def run_pipeline(config: PipelineConfig, project_root: Path) -> Path:
     processed = build_all_features(
         china_clean, cross_aligned, config.lookback_windows,
         top_k_features=config.top_k_features,
+        cross_symbols=config.cross_market,
     )
 
     # 5. Save

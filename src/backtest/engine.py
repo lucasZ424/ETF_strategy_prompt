@@ -1,4 +1,13 @@
-"""Simple daily backtest engine."""
+"""Simple daily backtest engine aligned to gap-return target.
+
+Execution model (matching open_to_prev_close_log_return target):
+- Signal for day T is known before T's open (features use data up to T-1).
+- Entry: previous close (adj_close_{T-1}) — conceptually, position taken EOD T-1.
+- Exit: day T's open — the gap is realized.
+- PnL per trade = open_T / adj_close_{T-1} - 1  (matches model target).
+- Slippage applied to both entry (close) and exit (open).
+- Fees deducted from cash on each trade.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +25,7 @@ from .interface import (
     Trade,
     bps_to_decimal,
 )
+from src.config import BacktestConfig
 from .strategies import EqualWeightSignalStrategy
 
 logger = logging.getLogger(__name__)
@@ -30,14 +40,23 @@ def _group_by_date(items, date_fn):
     return groups
 
 
-class SimpleBacktestEngine:
-    """Daily rebalance backtest engine.
+def _bar_date(b):
+    return b.timestamp.date() if isinstance(b.timestamp, datetime) else b.timestamp
 
-    Execution model:
-    - Each day, the strategy produces target weights from forecasts.
-    - Trades execute at the day's Open price + slippage.
-    - Fees are deducted from cash on each trade.
-    - Portfolio is marked-to-market at Close prices.
+
+def _forecast_date(f):
+    return f.timestamp.date() if isinstance(f.timestamp, datetime) else f.timestamp
+
+
+class SimpleBacktestEngine:
+    """Gap-return backtest engine.
+
+    For each forecast date T with a signal:
+      1. Enter at close_{T-1} + slippage  (previous day's close).
+      2. Exit at open_T - slippage         (day T's open).
+      3. PnL captures exactly the overnight gap the model predicts.
+
+    Each day's positions are fully closed — no carry between days.
     """
 
     def run(
@@ -45,99 +64,108 @@ class SimpleBacktestEngine:
         bars: Sequence[MarketBar],
         forecasts: Sequence[Forecast],
         strategy: EqualWeightSignalStrategy,
-        initial_cash: float,
-        fee_bps: float,
-        slippage_bps: float,
+        config: BacktestConfig,
     ) -> BacktestResult:
-        fee_rate = bps_to_decimal(fee_bps)
-        slip_rate = bps_to_decimal(slippage_bps)
+        initial_cash = config.initial_cash
+        fee_rate = bps_to_decimal(config.fee_bps)
+        slip_rate = bps_to_decimal(config.slippage_bps)
 
-        bars_by_date: Dict[date, List[MarketBar]] = _group_by_date(
-            bars, lambda b: b.timestamp.date() if isinstance(b.timestamp, datetime) else b.timestamp
-        )
-        forecasts_by_date: Dict[date, List[Forecast]] = _group_by_date(
-            forecasts, lambda f: f.timestamp.date() if isinstance(f.timestamp, datetime) else f.timestamp
-        )
+        bars_by_date = _group_by_date(bars, _bar_date)
+        forecasts_by_date = _group_by_date(forecasts, _forecast_date)
 
-        sorted_dates = sorted(set(bars_by_date.keys()) & set(forecasts_by_date.keys()))
-        if not sorted_dates:
-            logger.warning("No overlapping dates between bars and forecasts.")
+        all_bar_dates = sorted(bars_by_date.keys())
+        forecast_dates = sorted(forecasts_by_date.keys())
+
+        if not forecast_dates or len(all_bar_dates) < 2:
+            logger.warning("Insufficient data for backtest.")
             return BacktestResult(
                 equity_curve=[], returns=[], trades=[],
-                metadata={"initial_cash": initial_cash},
+                metadata={"initial_cash": initial_cash, "final_value": initial_cash,
+                          "total_trades": 0, "total_fees": 0.0, "total_slippage": 0.0,
+                          "fee_bps": config.fee_bps, "slippage_bps": config.slippage_bps,
+                          "n_trading_days": 0},
             )
 
+        # Map each bar date to its previous bar date
+        prev_bar_map = {}
+        for i in range(1, len(all_bar_dates)):
+            prev_bar_map[all_bar_dates[i]] = all_bar_dates[i - 1]
+
         cash = initial_cash
-        positions: Dict[str, float] = {}  # symbol -> quantity
         all_trades: List[Trade] = []
         equity_curve: List[Tuple[date, float]] = []
         total_fees = 0.0
         total_slippage = 0.0
 
-        for d in sorted_dates:
-            day_bars = {b.symbol: b for b in bars_by_date[d]}
-            day_forecasts = forecasts_by_date[d]
+        for T in forecast_dates:
+            if T not in prev_bar_map:
+                continue
+            T_prev = prev_bar_map[T]
 
-            # Compute target weights
-            dt = datetime.combine(d, datetime.min.time())
+            if T not in bars_by_date or T_prev not in bars_by_date:
+                continue
+
+            bars_T = {b.symbol: b for b in bars_by_date[T]}
+            bars_prev = {b.symbol: b for b in bars_by_date[T_prev]}
+            day_forecasts = forecasts_by_date[T]
+
+            # Strategy decides weights based on forecasts for day T
+            dt = datetime.combine(T, datetime.min.time())
             target_weights = strategy.target_weights(dt, day_forecasts)
 
-            # Current portfolio value at open prices (for sizing)
             port_value = cash
-            for sym, qty in positions.items():
-                if sym in day_bars:
-                    port_value += qty * day_bars[sym].open
+            day_pnl = 0.0
+            day_fees = 0.0
+            day_slippage = 0.0
 
-            # Compute target positions (in quantity)
-            target_qty: Dict[str, float] = {}
             for sym, w in target_weights.items():
-                if sym in day_bars and day_bars[sym].open > 0:
-                    target_qty[sym] = (w * port_value) / day_bars[sym].open
-
-            # Determine trades needed
-            current_syms = set(positions.keys()) | set(target_qty.keys())
-            for sym in current_syms:
-                cur = positions.get(sym, 0.0)
-                tgt = target_qty.get(sym, 0.0)
-                delta = tgt - cur
-
-                if abs(delta) < 1e-6:
+                if sym not in bars_prev or sym not in bars_T:
                     continue
-                if sym not in day_bars:
+                if abs(w) < 1e-9:
                     continue
 
-                bar = day_bars[sym]
-                # Execute at open + slippage
-                direction = 1 if delta > 0 else -1
-                exec_price = bar.open * (1 + direction * slip_rate)
-                trade_value = abs(delta * exec_price)
-                fee = trade_value * fee_rate
-                slippage_cost = abs(delta) * bar.open * slip_rate
+                prev_close = bars_prev[sym].close
+                today_open = bars_T[sym].open
 
-                cash -= delta * exec_price + fee
-                positions[sym] = positions.get(sym, 0.0) + delta
-                total_fees += fee
-                total_slippage += slippage_cost
+                if prev_close <= 0 or today_open <= 0:
+                    continue
+
+                # Position size (notional)
+                notional = w * port_value
+                direction = 1 if notional > 0 else -1
+
+                # Entry at prev close + slippage
+                entry_price = prev_close * (1 + direction * slip_rate)
+                # Exit at today's open - slippage
+                exit_price = today_open * (1 - direction * slip_rate)
+
+                quantity = notional / entry_price
+
+                # Trade PnL
+                trade_pnl = quantity * (exit_price - entry_price)
+                entry_fee = abs(notional) * fee_rate
+                exit_fee = abs(quantity * exit_price) * fee_rate
+                trade_fee = entry_fee + exit_fee
+                trade_slip = (abs(quantity) * prev_close * slip_rate
+                              + abs(quantity) * today_open * slip_rate)
+
+                day_pnl += trade_pnl - trade_fee
+                day_fees += trade_fee
+                day_slippage += trade_slip
 
                 all_trades.append(Trade(
                     timestamp=dt,
                     symbol=sym,
-                    quantity=delta,
-                    price=exec_price,
-                    fee=fee,
-                    slippage=slippage_cost,
+                    quantity=quantity,
+                    price=entry_price,
+                    fee=trade_fee,
+                    slippage=trade_slip,
                 ))
 
-            # Clean near-zero positions
-            positions = {s: q for s, q in positions.items() if abs(q) > 1e-9}
-
-            # Mark-to-market at close
-            port_value_close = cash
-            for sym, qty in positions.items():
-                if sym in day_bars:
-                    port_value_close += qty * day_bars[sym].close
-
-            equity_curve.append((d, port_value_close))
+            cash += day_pnl
+            total_fees += day_fees
+            total_slippage += day_slippage
+            equity_curve.append((T, cash))
 
         # Compute daily returns
         equity_values = [v for _, v in equity_curve]
@@ -148,19 +176,20 @@ class SimpleBacktestEngine:
             else:
                 returns.append(0.0)
 
+        final_value = equity_values[-1] if equity_values else initial_cash
         metadata = {
             "initial_cash": initial_cash,
-            "final_value": equity_values[-1] if equity_values else initial_cash,
+            "final_value": final_value,
             "total_trades": len(all_trades),
             "total_fees": total_fees,
             "total_slippage": total_slippage,
-            "fee_bps": fee_bps,
-            "slippage_bps": slippage_bps,
-            "n_trading_days": len(sorted_dates),
+            "fee_bps": config.fee_bps,
+            "slippage_bps": config.slippage_bps,
+            "n_trading_days": len(equity_curve),
         }
         logger.info(
             "Backtest complete: %d days, %d trades, final=%.2f",
-            len(sorted_dates), len(all_trades), metadata["final_value"],
+            len(equity_curve), len(all_trades), final_value,
         )
 
         return BacktestResult(
@@ -172,7 +201,11 @@ class SimpleBacktestEngine:
 
 
 def load_market_bars(raw_dir, symbols: List[str], start_date=None, end_date=None) -> List[MarketBar]:
-    """Load raw CSVs into MarketBar objects."""
+    """Load raw CSVs into MarketBar objects.
+
+    Loads one extra day before start_date so prev-close is available for the
+    first forecast date.
+    """
     from pathlib import Path
 
     raw_path = Path(raw_dir) / "china_etfs"
@@ -185,8 +218,14 @@ def load_market_bars(raw_dir, symbols: List[str], start_date=None, end_date=None
             continue
 
         df = pd.read_csv(csv_path, parse_dates=["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
+
+        # Include one extra day before start_date for prev-close entry
         if start_date:
-            df = df[df["Date"] >= pd.Timestamp(start_date)]
+            ts = pd.Timestamp(start_date)
+            first_valid_idx = df["Date"].searchsorted(ts)
+            load_from = max(0, first_valid_idx - 1)
+            df = df.iloc[load_from:]
         if end_date:
             df = df[df["Date"] <= pd.Timestamp(end_date)]
 

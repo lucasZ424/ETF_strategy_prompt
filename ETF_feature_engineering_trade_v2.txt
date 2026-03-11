@@ -1,0 +1,280 @@
+ETF Feature Engineering - Trade / Alpha-Gate-Regime Pipeline
+=============================================================
+
+Scope
+-----
+This file is exclusive to the trading branch.
+It defines the shared feature contract for:
+- alpha regression
+- ternary triple-barrier gate
+- regime model for optimizer-policy selection
+- downstream covariance engine and CPLEX optimizer
+
+This file intentionally excludes dashboard-specific raw close-price forecast
+design. It only covers the trading branch and the datasets needed by the
+trading models.
+
+Trading targets
+---------------
+Primary alpha target:
+    daily-estimated 10-day forward adjusted log return
+
+Conceptually:
+    y_alpha_t = log(AdjClose_{t+10} / AdjClose_t)
+
+Auxiliary gate target:
+    triple-barrier ternary label in {-1, 0, +1}
+
+Auxiliary regime target:
+    market-state label used to select optimizer policy, for example:
+    aggressive / balanced / defensive
+
+Risk engine note
+----------------
+The covariance engine is not a supervised prediction target.
+It consumes adjusted log-return history derived from Adj Close prices across the
+ETF universe and produces risk inputs such as covariance and volatility for the
+CPLEX optimizer.
+
+Why Adj Close is required
+-------------------------
+All trading-branch features involving closing-price dynamics must use Adj Close,
+not raw Close.
+
+Reason:
+1. The trading branch is meant to learn economically meaningful ETF return
+   behavior.
+2. Adj Close preserves split/dividend-adjusted continuity.
+3. This reduces artificial distortions around corporate-action events and makes
+   return-based alpha, gate, and risk estimation more stable.
+
+Dataset contract from one builder
+---------------------------------
+One shared feature builder should compute the full trading feature backbone once
+and then emit four downstream views:
+
+1. alpha dataset:
+   ETF-level rows keyed by [date, symbol], filtered to features tagged `alpha`
+2. gate dataset:
+   ETF-level rows keyed by [date, symbol], filtered to features tagged `gate`
+3. regime dataset:
+   date-level rows keyed by [date], built by aggregating features tagged
+   `regime` plus regime-only market-state features
+4. covariance-engine inputs:
+   adjusted log-return matrix by [date x symbol], derived directly from Adj
+   Close and not subjected to feature screening
+
+Usage tags
+----------
+Each feature carries explicit usage tags:
+- `alpha`  = candidate input to the alpha regressor
+- `gate`   = candidate input to the tradability gate
+- `regime` = candidate input to the regime dataset
+
+Important note:
+- For ETF-level features, the `regime` tag means the feature may be aggregated
+  to date-level for the regime dataset.
+- Not every tagged feature must survive feature selection; the tags define the
+  eligible pool.
+
+Notation
+--------
+Let:
+- A_t = Adj Close at date t
+- O_t, H_t, L_t = Open, High, Low
+- V_t = Volume
+- eps = small constant
+
+Feature table - shared trading backbone
+---------------------------------------
+Category | Feature Name | Variable Name | Formula / Construction | Status | Usage Tags | Rationale
+
+1. Core adjusted-price primitives
+---------------------------------
+Core Price | Adjusted close | adj_close | raw Adj Close input | [fixed] | alpha|gate|regime | required base series for all close-based trade features
+Core Price | Log adjusted close | log_adj_close | log(adj_close) | [fixed] | alpha|gate|regime | stable level primitive for derived features
+Core Return | 1d adjusted log return | ret1_adj | log(A_t / A_{t-1}) | [keep] | alpha|gate|regime | immediate momentum state
+Core Return | 3d adjusted log return | ret3_adj | log(A_t / A_{t-3}) | [screen] | alpha|gate|regime | short-horizon reinforcement
+Core Return | 5d adjusted log return | ret5_adj | log(A_t / A_{t-5}) | [keep] | alpha|gate|regime | shorter-horizon timing context
+Core Return | 10d adjusted log return | ret10_adj | log(A_t / A_{t-10}) | [keep] | alpha|gate|regime | direct alpha-target-aligned momentum signal
+Core Return | 20d adjusted log return | ret20_adj | log(A_t / A_{t-20}) | [keep] | alpha|gate|regime | broader regime momentum
+
+2. Horizon-aligned mean-reversion block
+---------------------------------------
+Mean Reversion | 5d adj z-score | zscore5_adj | (A_t - ma5_adj) / std_adj_5 | [screen] | alpha|gate|regime | shorter-horizon countertrend pressure
+Mean Reversion | 10d adj z-score | zscore10_adj | (A_t - ma10_adj) / std_adj_10 | [keep] | alpha|gate|regime | direct half-month reversion signal
+Mean Reversion | 20d adj z-score | zscore20_adj | (A_t - ma20_adj) / std_adj_20 | [screen] | alpha|gate|regime | broader stretch indicator
+Mean Reversion | Adj close / MA10 | adj_over_ma10 | A_t / ma10_adj | [keep] | alpha|gate|regime | compact target-aligned distance measure
+Mean Reversion | Adj close / MA20 | adj_over_ma20 | A_t / ma20_adj | [screen] | alpha|gate|regime | broader stretch proxy
+
+3. Trend / normalized momentum block
+------------------------------------
+Trend | 10d vol-scaled momentum | ret10_over_rv10 | ret10_adj / (rv10_adj + eps) | [keep] | alpha|gate|regime | target-aligned normalized momentum
+Trend | 20d vol-scaled momentum | ret20_over_rv20 | ret20_adj / (rv20_adj + eps) | [keep] | alpha|gate|regime | medium-horizon normalized trend state
+Trend | EMA ratio | ema10_over_ema20_adj | ema10_adj / ema20_adj | [keep] | alpha|gate|regime | target-aligned trend steepness
+Trend | MA ratio | ma10_over_ma20_adj | ma10_adj / ma20_adj | [screen] | alpha|gate|regime | complementary shape signal
+Trend | Rolling slope 10 | slope10_adj | OLS slope of log_adj_close over 10 bars | [keep] | alpha|gate|regime | trend shape aligned with 10-day target
+Trend | Rolling slope 5 | slope5_adj | OLS slope of log_adj_close over 5 bars | [screen] | alpha|gate|regime | shorter-horizon acceleration context
+
+4. Volatility / risk block
+--------------------------
+Volatility | Rolling std 5 | rv5_adj | rolling_std(ret1_adj, 5) | [screen] | alpha|gate|regime | short realized vol context
+Volatility | Rolling std 10 | rv10_adj | rolling_std(ret1_adj, 10) | [keep] | alpha|gate|regime | short-to-medium realized risk state
+Volatility | Rolling std 20 | rv20_adj | rolling_std(ret1_adj, 20) | [keep] | alpha|gate|regime | broader risk state
+Volatility | ATR 14 scaled | atr14_over_adj | ATR(14) / adj_close | [keep] | alpha|gate|regime | normalized range volatility
+Volatility | High-low range | hl_range_adjproxy | (H_t - L_t) / A_t | [keep] | alpha|gate|regime | intraday spread proxy relative to adjusted scale
+Volatility | Absolute 1d return | abs_ret1_adj | abs(ret1_adj) | [screen] | alpha|gate|regime | simple shock-state measure
+Volatility | Open-prev adj gap | gap_open_prev_adj | log(O_t / A_{t-1}) | [screen] | alpha|gate|regime | overnight jump context
+
+5. Volume block
+---------------
+Volume | Volume z-score 20 | vol_z20 | (V_t - vol_ma20) / std_vol_20 | [keep] | alpha|gate|regime | unusual activity confirmation
+Volume | Volume MA ratio 20 | vol_ma_ratio20 | V_t / vol_ma20 | [keep] | alpha|gate|regime | relative liquidity/activity level
+Volume | Log volume | log_volume | log(V_t + 1) | [screen] | alpha|gate|regime | stabilized size proxy
+
+6. Cross-market and macro block
+-------------------------------
+Cross-Market | SPY lagged return | spy_ret_lag1 | lagged aligned return | [keep] | alpha|gate|regime | US broad equity spillover
+Cross-Market | QQQ lagged return | qqq_ret_lag1 | lagged aligned return | [keep] | alpha|gate|regime | growth / tech spillover
+Cross-Market | IEUR lagged return | ieur_ret_lag1 | lagged aligned return | [keep] | alpha|gate|regime | EU risk context
+Cross-Market | SPY lagged 10d return | spy_ret10d_lag1 | lagged aligned 10-day return | [keep] | alpha|gate|regime | target-aligned US broad equity context
+Cross-Market | IEUR lagged 10d return | ieur_ret10d_lag1 | lagged aligned 10-day return | [keep] | alpha|gate|regime | target-aligned EU equity context
+Global Risk | VIX change lag | vix_chg_lag1 | lagged change in ^VIX | [keep] | alpha|gate|regime | global risk sentiment
+Global Risk | US10Y change lag | us10y_chg_lag1 | lagged change in ^TNX | [keep] | alpha|gate|regime | rates shock context
+Global Risk | DXY return lag | dxy_ret_lag1 | lagged DXY log return | [keep] | alpha|gate|regime | macro stress / USD strength context
+
+7. Relative-strength / peer-comparison block
+--------------------------------------------
+Relative Strength | 10d return vs SPY 10d return | rel10_spy | ret10_adj - spy_ret10d_lag1 | [keep] | alpha|gate|regime | local-vs-US relative opportunity
+Relative Strength | 10d return vs IEUR 10d return | rel10_ieur | ret10_adj - ieur_ret10d_lag1 | [keep] | alpha|gate|regime | local-vs-EU relative opportunity
+
+8. Cross-sectional ETF block
+----------------------------
+Cross-Section | Cross-ETF 10d return z-score | zscore_ret10d_cross | z-score of ret10_adj across core ETFs on the same date | [keep] | alpha|gate | direct relative opportunity signal
+Cross-Section | Cross-ETF volume percentile | rank_volume_cross | percentile rank of vol_z20 across core ETFs on the same date | [keep] | alpha|gate | direct relative activity / attention signal
+
+9. Gate-specific tradability overlay
+------------------------------------
+Gate Overlay | Downside semivol 10 | downside_semivol_10 | semideviation of negative ret1_adj over 10 bars | [keep] | gate|regime | downside path-risk summary
+Gate Overlay | Max drawdown 10 | max_drawdown_10 | rolling max drawdown over 10 bars using Adj Close | [keep] | gate|regime | captures adverse path behavior not seen in endpoint return alone
+Gate Overlay | Gap frequency 10 | gap_freq_10 | fraction of last 10 bars with abs(gap_open_prev_adj) above threshold | [keep] | gate | unstable open-gap behavior raises execution risk
+Gate Overlay | Whipsaw count 5 | whipsaw_5 | sign changes in ret1_adj over last 5 bars | [keep] | gate | noisy short-term reversal environment
+Gate Overlay | Cost buffer 10 | cost_buffer_10 | abs(ret10_adj) minus estimated round-trip cost threshold | [keep] | gate | checks whether expected move is large enough to absorb fees/slippage
+
+10. Regime-only market-state block
+----------------------------------
+Regime | Universe 10d return mean | universe_ret10_mean | mean(ret10_adj) across ETFs on date t | [keep] | regime | broad directional trend across the universe
+Regime | Universe 10d return dispersion | universe_ret10_dispersion | std(ret10_adj) across ETFs on date t | [keep] | regime | breadth vs divergence condition
+Regime | Breadth above MA10 | universe_breadth_ma10 | fraction of ETFs with adj_over_ma10 > 1 on date t | [keep] | regime | market breadth for trend confirmation
+Regime | Breadth positive 10d | universe_breadth_pos10 | fraction of ETFs with ret10_adj > 0 on date t | [keep] | regime | cross-sectional risk-on / risk-off signal
+Regime | Average ETF vol 20 | universe_vol20_mean | mean(rv20_adj) across ETFs on date t | [keep] | regime | background market turbulence
+Regime | Average pairwise corr 20 | universe_corr20 | rolling average pairwise correlation across ETF returns | [keep] | regime | crowding / diversification collapse indicator
+Regime | Universe volume stress | universe_volume_stress | mean(vol_z20) across ETFs on date t | [screen] | regime | unusual market-wide activity level
+Regime | Macro stress score | macro_stress_score | composite of vix_chg_lag1, dxy_ret_lag1, us10y_chg_lag1 | [keep] | regime | compact macro risk state
+Regime | Cross-market trend score | cross_market_trend_score | composite of SPY / QQQ / IEUR lagged trend features | [keep] | regime | external market trend condition
+
+Recommended baseline feature sets
+---------------------------------
+Alpha baseline:
+1. ret1_adj
+2. ret5_adj
+3. ret10_adj
+4. ret20_adj
+5. zscore10_adj
+6. adj_over_ma10
+7. ret10_over_rv10
+8. ret20_over_rv20
+9. ema10_over_ema20_adj
+10. slope10_adj
+11. rv10_adj
+12. rv20_adj
+13. atr14_over_adj
+14. hl_range_adjproxy
+15. vol_z20
+16. vol_ma_ratio20
+17. spy_ret_lag1
+18. qqq_ret_lag1
+19. ieur_ret_lag1
+20. spy_ret10d_lag1
+21. ieur_ret10d_lag1
+22. vix_chg_lag1
+23. us10y_chg_lag1
+24. dxy_ret_lag1
+25. rel10_spy
+26. rel10_ieur
+27. zscore_ret10d_cross
+28. rank_volume_cross
+
+Gate baseline:
+1. shared alpha backbone that survives selection
+2. downside_semivol_10
+3. max_drawdown_10
+4. gap_freq_10
+5. whipsaw_5
+6. cost_buffer_10
+
+Regime baseline:
+1. universe_ret10_mean
+2. universe_ret10_dispersion
+3. universe_breadth_ma10
+4. universe_breadth_pos10
+5. universe_vol20_mean
+6. universe_corr20
+7. macro_stress_score
+8. cross_market_trend_score
+9. vix_chg_lag1
+10. us10y_chg_lag1
+11. dxy_ret_lag1
+
+Covariance-engine inputs
+------------------------
+The covariance engine does not use the screened model-feature subsets above.
+It should consume:
+- daily adjusted log-return matrix across the ETF universe
+- rolling return window consistent with the optimizer horizon
+- optional EWMA or shrinkage estimator for covariance stability
+
+This is critical:
+- Adj Close is the correct source data.
+- Portfolio optimization should use return and covariance inputs derived from
+  Adj Close, not raw price levels.
+
+Feature selection logic
+-----------------------
+A. Shared builder
+- Compute the full feature backbone once.
+- Emit alpha and gate datasets as ETF-level views filtered by usage tags.
+- Emit regime dataset as a date-level aggregated view filtered by usage tags.
+
+B. Alpha and gate selection
+- Apply Pearson correlation filter to non-cross-market tabular blocks in the
+  training set only.
+- Apply XGBoost importance ranking separately for alpha and gate candidate pools.
+- Preserve cross-market / macro block unless validation proves otherwise.
+
+C. Regime selection
+- Perform feature selection on the date-level regime dataset only.
+- Respect chronological validation by regime date, not pooled ETF rows.
+- Prefer compact market-state features over high-dimensional ETF-specific inputs.
+
+D. Covariance engine
+- No Pearson / importance screening.
+- Risk estimation quality depends on the return matrix and estimator choice, not
+  on the alpha / gate / regime feature subsets.
+
+E. Horizon alignment rule
+- Since the alpha target is a 10-day forward return, at least one momentum
+  feature and one mean-reversion feature should exist at or near the 10-day
+  scale.
+- This is why ret10_adj, zscore10_adj, and ret10_over_rv10 remain mandatory
+  baseline considerations.
+
+Frozen decisions reflected here
+-------------------------------
+1. Trading branch uses one shared builder with multiple dataset views.
+2. Primary trading target is forward 10-day adjusted log return.
+3. Ternary triple-barrier gate is retained as the tradability model.
+4. Regime model is required because optimizer policy depends on market state.
+5. Covariance engine consumes adjusted-return history, not engineered alpha features.
+6. Portfolio weights are produced by CPLEX, not pure top-rank selection.
+7. Cross-market block is preserved unless later validation proves otherwise.

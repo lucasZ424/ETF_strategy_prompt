@@ -42,8 +42,8 @@ from src.data.cross_market import align_cross_market_to_china  # noqa: E402
 from src.data.loader import load_cross_market_etfs, load_single_csv  # noqa: E402
 from src.evaluation.backtest_metrics import compute_backtest_metrics  # noqa: E402
 from src.evaluation.signal import SignalConfig, predict_to_signal  # noqa: E402
-from src.features.builder import build_all_features  # noqa: E402
-from src.models.trainer import safe_feature_array  # noqa: E402
+from src.features.builder import build_trade_features  # noqa: E402
+from src.models.trainer import safe_X  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,12 +60,9 @@ _SIGNAL_MAP = {"long": Signal.LONG, "short": Signal.SHORT, "flat": Signal.FLAT}
 
 def _build_version_tag(config_path: Path) -> str:
     model_cfg = load_model_config(config_path)
-    pipe_cfg = load_config(config_path)
     t = int(model_cfg.train_ratio * 100)
     v = int(model_cfg.val_ratio * 100)
     esp = model_cfg.early_stopping_patience
-    if pipe_cfg.top_k_features is not None:
-        return f"xgboost_{pipe_cfg.top_k_features}ft_t{t}_v{v}_esp{esp}"
     return f"t{t}_v{v}_esp{esp}"
 
 
@@ -166,9 +163,14 @@ def _build_unseen_features(symbol, csv_path, pipe_cfg, feature_names):
     cross_aligned = align_cross_market_to_china(
         china_dates, cross_clean, pipe_cfg.cross_market, raw_dir=raw_dir)
 
-    processed = build_all_features(
-        unseen_clean, cross_aligned, pipe_cfg.lookback_windows,
-        top_k_features=None, cross_symbols=pipe_cfg.cross_market)
+    datasets = build_trade_features(
+        unseen_clean, cross_aligned,
+        feature_selection=None,  # no selection for unseen inference
+        seed=pipe_cfg.seed,
+        cost_threshold=pipe_cfg.gate.cost_threshold,
+        gap_threshold=pipe_cfg.gate.gap_threshold,
+    )
+    processed = datasets.backbone
 
     missing = [f for f in feature_names if f not in processed.columns]
     if missing:
@@ -212,7 +214,7 @@ def run_unseen_backtest(symbol, model, feature_names, signal_config, pipe_cfg, b
     if len(test_df) < 10:
         return {"label": f"unseen_{symbol}", "symbol": symbol, "error": "insufficient_test_data"}
 
-    X = safe_feature_array(test_df, feature_names)
+    X = safe_X(test_df, feature_names)
     predictions = model.predict(X)
     test_df["predicted_return"] = predictions
     test_df["signal"] = [predict_to_signal(p, signal_config).value for p in predictions]

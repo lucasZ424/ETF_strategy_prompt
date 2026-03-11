@@ -1,102 +1,212 @@
 ################################################################################
-# ETF Forecasting Pilot Project - Integrated Structure (v3)
-# Date: 2026-03-09
+# ETF Selection + Trade Strategy + Price Dashboard Project Structure (v3-final)
+# Date: 2026-03-11
 #
 # Goal:
-# Build a working ETF forecasting + strategy-prompt pilot, then evolve it into
-# a robust frontend-backend workflow without redesigning from scratch.
+# Build a practical ETF research system with two coordinated outputs:
+# 1) a prediction-driven optimizer-based trade strategy pipeline
+# 2) an investor-facing price dashboard that reports 1, 3, and 5 day raw
+#    close-price forecasts.
 #
 # Scope statement:
-# - Pilot now: data pipeline + model + signal + basic dashboard/API.
-# - Production later: portfolio/risk/execution expansion on top of the same core.
+# - Trading pipeline now: benchmark-first alpha, gate, regime, covariance,
+#   optimization, and local backtest stack.
+# - Price dashboard now: one shared forecasting model that emits 1d / 3d / 5d
+#   raw close-price forecasts for the frontend.
+# - Trading dashboard now: selected ETF forward-return outlook plus tradability
+#   and current optimization regime.
+# - Live trading remains out of scope; this is research / paper-trading support.
 ################################################################################
 
 1) Core Design Principles (Non-negotiable)
 
 - Contract-first:
   Keep one canonical data contract across config, schema validation, feature
-  engineering, training, inference, and backtest.
+  engineering, training, inference, optimization, gating, dashboard
+  forecasting, and backtest.
 
 - No-lookahead:
   All cross-market features must be strictly lagged and aligned to China market
   decision timestamps.
 
 - Reproducibility:
-  Every training run must be traceable (config snapshot, compact feature list,
-  params, metrics, signal thresholds, version tag).
+  Every run must be traceable (config snapshot, selected feature list, model
+  params, threshold params, barrier params, metrics, version tag, artifact bundle).
 
 - Config-driven behavior:
-  No hardcoded symbol assumptions in feature generation, threshold logic,
-  portfolio logic, or inference behavior.
+  No hardcoded symbol assumptions in feature generation, optimization, gating,
+  dashboard logic, or backtest behavior.
+
+- Module separation with shared data plane:
+  Trading and dashboard forecasts may use different targets/models, but must
+  share the same validated data pipeline and feature contract where possible.
 
 - Pilot honesty:
   This is paper-trading / research support only, not live investment advice.
 
+- Benchmark-first architecture discipline:
+  The project must benchmark a simpler XGBoost-first trading baseline first.
+  TCN becomes an approved upgrade only if it delivers stable out-of-sample
+  value beyond the simpler baseline.
 
-2) Data and Modeling Objective (Updated)
+- Optimizer-first allocation discipline:
+  Portfolio weights are produced by the downstream optimizer, not by pure
+  top-rank selection. Predictive models should therefore estimate optimizer
+  inputs directly: alpha, tradability, regime, and risk.
 
-- Forecast target:
-  Forward 5-day log return.
-- Objective rationale:
-  Move the pilot from one-step sensitivity toward short-horizon tradability,
-  lower turnover, and better post-cost robustness on unseen ETFs.
+
+2) Updated Modeling Objectives
+
+A. Trading / selection objective
+- Core alpha target:
+  Daily-estimated forward 10-day adjusted log return target.
+- Practical interpretation:
+  At each day t, estimate the ETF's next-10-trading-day return using only
+  information available at t, then combine that alpha forecast with tradability,
+  regime, and covariance inputs to produce portfolio weights.
+- Baseline horizon choice:
+  Use 10 trading days (roughly half a month) instead of 5 trading days to
+  reduce turnover and better absorb China ETF transaction costs.
+- Reason for daily estimation:
+  Preserve daily information flow and avoid the false assumption that a 10-day
+  target implies a blind fixed 10-day holding period.
+- Gate objective:
+  Learn ETF-level tradability / path-risk state so the optimizer and dashboard
+  can distinguish actionable opportunities from noisy or cost-inefficient ones.
+- Regime objective:
+  Learn market-state labels that select among CPLEX allocation policies such as
+  aggressive constrained max-Sharpe vs defensive min-variance.
+- Risk objective:
+  Estimate covariance and related risk inputs from adjusted-return history; risk
+  is handled in the covariance engine and optimizer, not folded into the alpha
+  target.
+
+B. Dashboard / price-forecast objective
+- Separate UI-facing target family:
+  1-day, 3-day, and 5-day raw close-price forecasts for investor display.
+- Additional trading-outlook dashboard:
+  selected ETF forward 10-day return outlook, tradability signal, and current
+  optimization regime / policy state.
+- Baseline implementation choice:
+  Use one shared model to emit all 3 price horizons so the project remains
+  manageable for a single developer, version control stays cleaner, and feature
+  engineering remains integrated.
+- Supporting note:
+  If one shared model later proves materially weaker than separate horizon
+  models, separate models may be introduced as a controlled extension, not in
+  the first baseline.
+
+C. Core market and external context
 - Core market:
   Representative China ETFs.
 - Cross-market context:
   US/EU ETFs and macro risk proxies with strict lag alignment.
-- Baseline model path:
-  1. XGBoost first (primary baseline)
-  2. LSTM optional after XGBoost baseline is stable
-- Prediction-to-trade conversion:
-  Use volatility-scaled thresholded no-trade-region logic instead of trading on
-  every predicted sign.
-- Threshold philosophy:
-  This project targets an advanced research-grade pilot rather than a simple
-  course-level demo, so signal activation thresholds will be volatility-scaled
-  to improve transferability across ETFs with different realized volatility.
 
 Representative universe for current pilot:
-- China core: 510050.SS, 510300.SS, 510500.SS, 159915.SZ, 588000.SS
+- China core: 510050.SS,510300.SS,510500.SS,512100.SS,510880.SS,588000.SS,159915.SZ,513130.SS,512690.SS,512170.SS,512480.SS,516160.SS,518880.SS
+
 - Cross-market context: SPY, QQQ, IEUR
 
 
-3) Pilot Architecture
+3) Trading Architecture: Baseline, Upgrade Path, and Final Intended Stack
+
+3.1 Baseline trading stack (must be benchmarked first)
+1. Shared data + feature pipeline
+2. XGBoost alpha regressor on engineered features
+3. Triple-barrier ternary gate classifier
+4. Regime model for optimizer-policy selection
+5. Covariance engine from adjusted-return history
+6. CPLEX optimizer
+7. Local backtest / strategy integrity layer
+
+3.2 Approved upgrade path
+- Add TCN temporal encoder only if it produces stable out-of-sample uplift on:
+  alpha quality, gate quality, regime quality, post-cost Sharpe, and robustness.
+
+3.3 Final intended nested stack (conditional on benchmark evidence)
+1. Shared data + feature pipeline
+2. TCN temporal encoder
+3. XGBoost alpha regressor on engineered features + temporal embedding
+4. Triple-barrier ternary gate classifier
+5. Regime model on macro / market-state features + optional temporal embedding
+6. Covariance engine from adjusted-return history
+7. CPLEX optimizer
+8. Local backtest / strategy integrity layer
+
+Interpretation of the nested roles:
+- TCN encoder:
+  Extract short temporal structure from rolling sequences efficiently without
+  moving directly to a heavy recurrent architecture.
+- XGBoost alpha regressor:
+  Learn expected forward return per ETF based on engineered features and
+  optional temporal embeddings.
+- Triple-barrier ternary gate:
+  Output tradability / path-aware action states so the optimizer and dashboard
+  can suppress weak or noisy opportunities.
+- Regime model:
+  Output aggressive / balanced / defensive market-state labels used to switch
+  CPLEX policy templates and risk budgets.
+- Covariance engine:
+  Produce risk inputs such as per-ETF volatility and the ETF covariance matrix
+  from adjusted-return history.
+- CPLEX optimizer:
+  Translate alpha, gate, regime, and covariance inputs into portfolio weights
+  under cost, leverage, and concentration constraints.
+
+Dashboard forecast stack:
+1. Shared data + feature pipeline
+2. One shared multi-horizon forecasting model for 1d / 3d / 5d raw close-price forecasts
+3. Trading-outlook view with forward 10-day return and tradability signal for selected ETFs
+4. API + frontend presentation layer
+
+
+4) Data Plane and Artifact Flow
 
 Data plane:
 1. Fetch raw data from Yahoo Finance into `data/raw/`.
-2. Clean, align, and engineer features into `data/processed/features_v2.*`.
-3. Build target labels as forward 5-day log return.
+2. Clean, align, and engineer features into `data/processed/`.
+3. Build:
+   - alpha targets
+   - gate labels
+   - regime labels / regime-state rules
+   - covariance-engine inputs
+   - dashboard price targets
 4. Train/evaluate models and output versioned artifacts to `models/` and
    `outputs/<version>/`.
 
 Service plane:
-1. Backend API (FastAPI) endpoints for health, model metadata, and prediction.
-2. Frontend dashboard for model status, prediction table, and strategy prompt
-   display.
+1. Backend API endpoints for health, model metadata, trade inference, and
+   dashboard price forecasts.
+2. Backend API endpoints for trading-outlook inference, tradability, current
+   regime, and optimizer metadata.
+3. Frontend dashboard for model status, near-future ETF price outlook, trading
+   outlook, and optimizer outputs.
 
 Control plane:
-1. Config management (`configs/*.toml`).
-2. Schema validation (`src/data/schema.py`).
-3. Tests and quality gates (unit + integration).
-4. Run traceability with consistent version tags.
+1. Config management (`configs/*.toml`)
+2. Schema validation (`src/data/schema.py`)
+3. Tests and quality gates (unit + integration)
+4. Run traceability with consistent version tags
 
 
-4) Development Phases with Exit Criteria
+5) Development Phases with Exit Criteria
 
-Phase 0: Pipeline Stabilization (must finish first)
+Phase 0: Pipeline Reset and Contract Alignment (must finish first)
 
 Tasks:
-1. Fix fetch script runtime issues and data summary generation.
-2. Unify column naming and target basis across config/schema/features.
-3. Remove hardcoded cross-market symbol assumptions from feature logic.
-4. Align config templates with parser behavior (no silent ignored fields).
-5. Refresh README commands to match actual workflow.
+1. Remove scope assumptions tied to the discarded old v3 baseline.
+2. Unify column naming and target definitions across config/schema/features.
+3. Separate trading targets from dashboard price targets in config and data
+   builders.
+4. Remove hardcoded cross-market symbol assumptions from feature logic.
+5. Align README commands with the benchmark-first workflow.
 
 Exit criteria:
-- A fresh clone can run fetch -> pipeline -> train -> plot without code edits.
+- A fresh clone can run fetch -> feature build -> target build -> train ->
+  evaluate without code edits.
 
 
-Phase 1: Data Retrieval and Preprocessing
+Phase 1: Shared Data Retrieval and Feature Engineering
 
 Tasks:
 1. Fetch and store China + cross-market ETF history from Yahoo Finance.
@@ -104,65 +214,125 @@ Tasks:
 3. Data cleaning policy:
    - China core ETFs: drop invalid/NaN rows in core columns.
    - Cross-market context: forward-fill and align by strict lag rule.
-4. Build feature set (see `ETF_feature_engineering_summary_v2.txt`).
-5. Apply feature selection in two stages for non-cross-market features:
-   - Stage A: Pearson correlation filter to remove highly redundant features.
-   - Stage B: XGBoost importance ranking on validation results to keep the most
-     stable and decision-relevant features.
-6. Keep cross-market and macro context block unchanged during compact-feature
-   redesign to preserve external regime information.
+4. Build redesigned feature sets (see `ETF_feature_engineering_trade_v2.txt` for trading and `ETF_feature_engineering_dash.txt` for dashboard forecasting).
+5. Apply feature selection for non-cross-market tabular blocks:
+   - Stage A: Pearson correlation filter.
+   - Stage B: XGBoost importance ranking.
+6. Preserve cross-market and macro context block unless later validation proves
+   a need to change it.
+7. Define sequence-input block separately so the later TCN upgrade can reuse the
+   same contract without rewriting the feature builder.
 
 Exit criteria:
-- Deterministic feature dataset generated with documented schema, compact
+- Deterministic feature dataset generated with documented schema, selected
   feature list, and no leakage.
 
 
-Phase 2: Data Split and Training Pipeline
+Phase 2: Trading Target and Triple-Barrier Label Construction
+
+Tasks:
+1. Build daily rolling forward 10-day alpha target.
+2. Build triple-barrier ternary labels for trade gating.
+3. Build baseline regime labels / rules for optimizer-policy selection.
+4. Freeze target/label definitions in config.
+
+Alpha target definition:
+- Let close_t be the ETF close at day t.
+- Let close_t+10 be the ETF close 10 trading days ahead.
+- Define forward 10-day log return:
+    y_alpha_t = log(close_t+10 / close_t)
+- Recompute this target daily so the model sees a daily-updated 10-day
+  opportunity score rather than a blind fixed holding rule.
+
+Triple-barrier ternary gate logic (baseline definition):
+- For each date t, use a fixed horizon H (default aligned with 10 trading days).
+- Set upper/lower price barriers using volatility-scaled distance from the
+  current price.
+- Label according to which barrier is hit first within the horizon:
+    +1 = upper barrier hit first (long)
+     0 = neither barrier hit first within horizon / flat
+    -1 = lower barrier hit first (short)
+- Barrier distances and horizon are config-driven and must be saved in run metadata.
+
+Baseline regime logic:
+- Output discrete states that can drive optimizer policy selection.
+- Recommended baseline states:
+    aggressive = broad uptrend / low stress
+    balanced   = mixed trend / normal stress
+    defensive  = weak trend / elevated stress
+- Baseline regime labels may initially be rule-defined from benchmark trend,
+  market breadth, and macro-stress features before a learned regime classifier
+  is introduced.
+
+Exit criteria:
+- Reproducible target/label dataset with no leakage and explicit config.
+
+
+Phase 3: Baseline Alpha, Gate, and Regime Model Training (XGBoost-first)
 
 Tasks:
 1. Chronological train/val/test split (date-based, no leakage).
-2. Train XGBoost baseline with Bayesian tuning + pruning.
-3. Save model bundle and training metadata.
-4. Evaluate with prediction metrics:
-   - MSE, RMSE, MAE, R2, directional accuracy
-5. Calibrate volatility-scaled signal thresholds on the validation set rather
-   than fixing them by intuition.
-6. Save threshold calibration outputs together with model artifacts.
+2. Train XGBoost regressor on:
+   - selected alpha features
+   - cross-market / macro block
+3. Train triple-barrier ternary gate classifier on the shared feature backbone
+   plus any gate-specific tradability features.
+4. Train regime model on date-level macro / market-state features.
+5. Save all model bundles, feature manifests, and metadata.
+6. Evaluate with regression and classification metrics.
 
-Volatility-scaled threshold implementation logic:
-- Let `pred_t` be the predicted forward 5-day log return at time t.
-- Let `vol_t` be a recent realized volatility estimate for the same ETF
-  (example: rolling std or realized vol over a fixed lookback window).
-- Define upper/lower trade thresholds as:
-    upper_t = +k * vol_t
-    lower_t = -k * vol_t
-- Signal rule:
-    if pred_t > upper_t  -> long / buy signal
-    if pred_t < lower_t  -> sell / short-or-flat signal (depending on mandate)
-    else                 -> no-trade / hold current state
-- Candidate k grid for validation calibration:
-    0.25, 0.50, 0.75, 1.00
-- Calibration target:
-  Prefer the k that produces the best post-cost Sharpe subject to acceptable
-  turnover, sufficient trade count, and stable behavior across ETFs.
+Core training outputs:
+- XGBoost alpha regressor artifact
+- triple-barrier ternary gate artifact
+- regime model artifact
+- selected alpha / gate / regime feature manifests
+- training metadata
+
+Recommended evaluation layer:
+- regression / score quality for alpha forecasts
+- gate classification quality
+- regime classification quality
 
 Exit criteria:
-- Reproducible training run with saved model, metrics, threshold calibration
-  results, and prediction outputs.
+- Reproducible baseline-model bundle with saved artifacts, metrics, and daily
+   inference outputs.
 
 
-Phase 3: Local Strategy Integrity Test (pilot backtest layer)
+Phase 4: Covariance Engine and CPLEX Policy Layer
 
 Tasks:
-1. Convert predictions to volatility-scaled threshold-based buy/sell/flat
-   signals with a no-trade region.
+1. Build covariance-engine inputs from adjusted log-return history across the ETF universe.
+2. Estimate rolling covariance and per-ETF volatility using a documented method
+   such as EWMA or shrinkage.
+3. Implement multiple CPLEX portfolio policies, for example:
+   - aggressive constrained max-Sharpe / max-leverage Sharpe
+   - balanced constrained mean-variance
+   - defensive min-variance
+4. Map regime states to optimizer policies, risk budgets, and leverage caps.
+5. Validate that optimizer outputs are feasible, stable, and reproducible.
+
+Core optimizer outputs:
+- expected return vector
+- covariance matrix / risk inputs
+- regime-selected policy
+- CPLEX portfolio weights
+- optimization metadata and constraints snapshot
+
+Exit criteria:
+- The optimizer can consume alpha, gate, regime, and covariance inputs and
+  produce coherent constrained weights.
+
+
+Phase 5: Trading Signal Conversion and Local Strategy Integrity Test
+
+Tasks:
+1. Combine alpha forecasts, gate output, regime state, covariance inputs, and
+   CPLEX policy selection into actionable portfolio weights.
 2. Run local backtest simulation with explicit assumptions.
-3. Report:
-   - Equity curve
-   - Return distribution
-   - Sharpe, CAGR, max drawdown
-4. Add transaction cost and slippage assumptions in every report.
-5. Add the following decision-quality and turnover diagnostics:
+3. Report trading diagnostics and cost-aware performance.
+4. Keep the added metrics below as mandatory outputs.
+
+Mandatory strategy metrics:
 
 +-------------------------------+-----------------------------------------------+
 | Metric                        | What it measures                              |
@@ -182,99 +352,95 @@ Tasks:
 | Hit rate conditional on trade | Directional accuracy only on timestamps where |
 | only                          | the strategy actually executed a trade.       |
 +-------------------------------+-----------------------------------------------+
-| Validation threshold          | Threshold-selection result from validation;   |
-| calibration result            | links signal strength to economic outcomes.   |
+| Threshold / gate calibration  | Selected gate / activation setting from       |
+| result                        | validation; documents why the final trade     |
+|                               | decision rules were chosen.                   |
++-------------------------------+-----------------------------------------------+
+| Regime-policy usage           | Frequency and transitions of optimizer policy |
+|                               | states (aggressive / balanced / defensive).   |
 +-------------------------------+-----------------------------------------------+
 
+Backtest reporting requirements:
+- equity curve
+- period return distribution
+- pre-cost / post-cost comparison
+- Sharpe / CAGR / max drawdown
+- position timeline
+- weight timeline
+- turnover timeline
+- trade log export
+- optimizer policy timeline
+- strategy metrics table above
+
 Exit criteria:
-- Strategy report is reproducible, assumptions are explicit in outputs, and the
-  backtest includes both prediction metrics and post-cost trading diagnostics.
+- A local run produces coherent signals, a cost-aware backtest report, and all
+   mandatory strategy metrics.
 
 
-Phase 4: Backend API Pilot
+Phase 6: Dashboard Price and Trading-Outlook Layer
 
 Tasks:
-1. Build FastAPI service wrapping current model inference.
-2. Expose endpoints:
-   - `GET /health`
-   - `GET /model/latest`
-   - `POST /predict`
-3. Enforce schema checks before inference:
-   - missing columns
-   - insufficient history
-   - invalid date order
-4. Return both model prediction and threshold-derived strategy state, if the
-   required volatility context is available.
+1. Build one shared model that outputs 1d / 3d / 5d raw close-price forecasts.
+2. Use raw Close as the official dashboard price target.
+3. Add a trading-outlook dashboard for selected ETFs that exposes:
+   - predicted forward 10-day return
+   - tradability signal / probability from the gate model
+   - current regime / active optimizer policy
+4. Preserve a shared feature contract to reduce maintenance burden for a single
+   developer.
+5. Validate each horizon separately even though the model artifact is shared.
+6. Expose API response fields for:
+   - predicted close_t+1
+   - predicted close_t+3
+   - predicted close_t+5
+   - derived % changes from current close
+   - predicted forward 10-day return
+   - tradability signal / probability
+   - current regime / optimizer policy
+7. Save dashboard-model version, training metadata, and horizon-wise metrics.
+
+Design note:
+- One shared model is the correct baseline for project manageability.
+- Separate horizon models are postponed unless shared-model performance is
+  clearly inadequate.
 
 Exit criteria:
-- Deterministic local inference API working with sample payloads.
+- The frontend can request a symbol and receive both price forecasts and the
+  trading-outlook panel from versioned artifacts.
 
 
-Phase 5: Frontend Dashboard Pilot
+Phase 7: TCN Upgrade Benchmark (conditional)
 
 Tasks:
-1. Build lightweight dashboard (Grafana or simple web UI).
-2. Minimum panels:
-   - Recent price trend (if available)
-   - Top ETF predicted returns table
-   - User-selected ETF prediction + strategy prompt
-   - Model version and last retrain time
-   - Current volatility-scaled threshold status (inside band / triggered)
+1. Train TCN temporal encoder on rolling sequence windows.
+2. Extract temporal embedding artifacts.
+3. Retrain alpha, gate, and regime models with:
+   - selected engineered features
+   - cross-market / macro block
+   - TCN embeddings where justified
+4. Compare against the XGBoost-first baseline.
+
+Upgrade acceptance criteria:
+- TCN branch is adopted only if it improves out-of-sample behavior with stable,
+  not incidental, gains on multiple validation windows and preferably across
+  leave-one-ETF-out tests.
+- Required evidence should cover:
+  - alpha quality improvement
+  - gate quality improvement
+  - regime quality improvement
+  - post-cost Sharpe improvement
+  - robustness / stability
 
 Exit criteria:
-- End-to-end local demo: input -> backend prediction -> frontend display.
+- Decision logged: `baseline_only` or `nested_tcn_enabled`.
 
+6) Frozen Decisions Already Confirmed
 
-Phase 6: Quality and Automation
-
-Tasks:
-1. Add integration tests for pipeline + training + inference API smoke run.
-2. Add weekly retrain job with logging and failure alerts.
-3. Add CI checks for lint/tests before merge.
-
-Exit criteria:
-- Regressions are caught automatically; weekly retrain is auditable.
-
-
-5) Open-Universe Inference Design (for deployment)
-
-Rules:
-1. Keep feature schema ID-agnostic (no ETF identity as core predictor).
-2. Require fixed input columns and minimum lookback length (example: 60 days).
-3. If insufficient history, return `not_enough_history` (no forced prediction).
-4. Keep cross-market features strictly lagged to China decision time.
-5. Validate generalization with leave-one-ETF-out tests to simulate unseen ETFs.
-6. Preserve threshold logic as config-driven so per-run calibration results can
-   be frozen and reused at inference time.
-
-
-6) Portfolio Optimization Extension (planned next-stage integration)
-
-Positioning:
-- Portfolio optimization is not treated as a fully independent module.
-- It will sit downstream of the prediction pipeline and consume model outputs,
-  regime signals, and risk estimates to translate predictions into weights.
-
-Planned role in the architecture:
-1. Prediction pipeline produces forward 5-day return forecasts and trade states.
-2. Regime layer classifies broad market condition (example: bull / bear).
-3. Portfolio layer selects allocation style conditional on regime.
-
-Illustrative regime-dependent styles under consideration:
-- Bear regime: Min Variance / Mean-Variance defensive allocation.
-- Bull regime: Max Sharpe / leveraged Max Sharpe style allocation.
-
-Constraint:
-- This extension is planned, but not yet part of the current baseline pilot.
-- Baseline pilot must first prove that the prediction layer is stable,
-  reproducible, and post-cost sensible.
-
-
-7) Deferred / Future Upgrades (not in current baseline pilot scope)
-
-1. Multi-step forecasting models (e.g., iTransformer/LSTM) after XGBoost
-   baseline with forward 5-day target is stable.
-2. Rich risk management and stress testing framework.
-3. Reinforcement learning for long-horizon policy simulation.
-4. Full website migration with complex interaction workflows.
-5. Optional AI assistant for strategy explanation and market sentiment context.
+- Triple-barrier gate type: ternary (long / flat / short)
+- Dashboard forecast output: one shared model for 1d / 3d / 5d
+- Dashboard official target: raw Close
+- Trading-outlook dashboard: selected ETF 10-day return + tradability + regime
+- Trading architecture: alpha regressor + gate + regime + covariance engine + CPLEX
+- Portfolio weights: produced by optimizer, not pure top-rank selection
+- Risk engine input: adjusted-return history derived from Adj Close prices
+- TCN policy: benchmark first, only adopt if it adds stable value

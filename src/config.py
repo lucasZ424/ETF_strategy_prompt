@@ -1,4 +1,4 @@
-"""Read and validate TOML configuration."""
+"""Read and validate TOML configuration for the pipeline."""
 
 from __future__ import annotations
 
@@ -9,8 +9,47 @@ from typing import List
 
 
 @dataclass(frozen=True)
+class DashboardTargetConfig:
+    """Dashboard target: multi-horizon log-return-to-close."""
+
+    horizons: List[int] = field(default_factory=lambda: [1, 5, 10])
+
+
+@dataclass(frozen=True)
+class BarrierConfig:
+    """Triple-barrier ternary gate label construction."""
+
+    horizon: int = 10
+    upper_multiplier: float = 1.0
+    lower_multiplier: float = 1.0
+    vol_lookback: int = 20
+
+
+@dataclass(frozen=True)
+class GateConfig:
+    """Gate-specific feature parameters."""
+
+    cost_threshold: float = 0.0016  # round-trip cost in log-return terms
+    gap_threshold: float = 0.005   # abs gap threshold for gap_freq_10
+
+
+@dataclass(frozen=True)
+class FeatureSelectionConfig:
+    """Two-stage feature selection: Pearson filter + XGBoost importance."""
+
+    correlation_threshold: float = 0.90
+    importance_top_k: int | None = None  # None = keep all post-correlation
+    protected_prefixes: List[str] = field(
+        default_factory=lambda: [
+            "spy_", "qqq_", "ieur_", "vix_", "us10y_", "dxy_",
+            "rel10_", "zscore_ret10d_cross", "rank_volume_cross",
+        ]
+    )
+
+
+@dataclass(frozen=True)
 class PipelineConfig:
-    """Flat configuration for the data processing pipeline."""
+    """Configuration for the data processing pipeline."""
 
     timezone: str = "Asia/Shanghai"
     seed: int = 42
@@ -18,14 +57,23 @@ class PipelineConfig:
     interim_dir: str = "data/interim"
     processed_dir: str = "data/processed"
     universe_core: List[str] = field(
-        default_factory=lambda: ["510050.SS", "510300.SS", "510500.SS", "159915.SZ"]
+        default_factory=lambda: [
+            "510050.SS", "510300.SS", "510500.SS", "512100.SS", "510880.SS", "588000.SS",
+            "159915.SZ", "513130.SS", "512690.SS", "512170.SS", "512480.SS",
+            "516160.SS", "518880.SS",
+        ]
     )
-    universe_optional: List[str] = field(default_factory=lambda: ["588000.SS"])
+    universe_optional: List[str] = field(default_factory=list)
+    unseen_etfs: List[str] = field(
+        default_factory=lambda: ["512880.SS", "159919.SZ"]
+    )
     cross_market: List[str] = field(default_factory=lambda: ["SPY", "QQQ", "IEUR"])
+    global_risk: List[str] = field(default_factory=lambda: ["VIX", "TNX", "DXY"])
     lookback_windows: List[int] = field(default_factory=lambda: [5, 10, 20])
-    target_definition: str = "open_to_prev_close_log_return"
-    target_horizon: int = 1
-    top_k_features: int | None = None  # GRA-GRG screening; None = keep all
+    barrier: BarrierConfig = field(default_factory=BarrierConfig)
+    gate: GateConfig = field(default_factory=GateConfig)
+    dashboard_target: DashboardTargetConfig = field(default_factory=DashboardTargetConfig)
+    feature_selection: FeatureSelectionConfig = field(default_factory=FeatureSelectionConfig)
 
 
 @dataclass(frozen=True)
@@ -37,9 +85,6 @@ class ModelConfig:
     test_ratio: float = 0.15
     optuna_trials: int = 100
     early_stopping_patience: int = 10
-    signal_threshold_search: List[float] = field(
-        default_factory=lambda: [round(x * 0.0005, 4) for x in range(1, 41)]
-    )
     model_dir: str = "models"
     output_dir: str = "outputs"
     seed: int = 42
@@ -56,29 +101,10 @@ class BacktestConfig:
     risk_free_rate: float = 0.02
 
 
-def load_backtest_config(path: Path) -> BacktestConfig:
-    """Parse [backtest] section from TOML and return BacktestConfig."""
-
-    raw_bytes = path.read_bytes()
-    if raw_bytes.startswith(b"\xef\xbb\xbf"):
-        raw_bytes = raw_bytes[3:]
-    raw = tomllib.loads(raw_bytes.decode("utf-8"))
-
-    b = raw.get("backtest", {})
-    return BacktestConfig(
-        initial_cash=b.get("initial_cash", 1_000_000.0),
-        fee_bps=b.get("fee_bps", 5.0),
-        slippage_bps=b.get("slippage_bps", 3.0),
-        max_gross_leverage=b.get("max_gross_leverage", 1.0),
-        risk_free_rate=b.get("risk_free_rate", 0.02),
-    )
-
-
 def load_config(path: Path) -> PipelineConfig:
     """Parse a TOML file and return a PipelineConfig."""
 
     raw_bytes = path.read_bytes()
-    # Strip UTF-8 BOM if present (common on Windows)
     if raw_bytes.startswith(b"\xef\xbb\xbf"):
         raw_bytes = raw_bytes[3:]
     raw = tomllib.loads(raw_bytes.decode("utf-8"))
@@ -86,7 +112,40 @@ def load_config(path: Path) -> PipelineConfig:
     proj = raw.get("project", {})
     data = raw.get("data", {})
     feat = raw.get("features", {})
-    tgt = raw.get("target", {})
+
+    # Barrier config
+    b = raw.get("barrier", {})
+    barrier = BarrierConfig(
+        horizon=b.get("horizon", 10),
+        upper_multiplier=b.get("upper_multiplier", 1.0),
+        lower_multiplier=b.get("lower_multiplier", 1.0),
+        vol_lookback=b.get("vol_lookback", 20),
+    )
+
+    # Gate config
+    gc = raw.get("gate", {})
+    gate = GateConfig(
+        cost_threshold=gc.get("cost_threshold", 0.0016),
+        gap_threshold=gc.get("gap_threshold", 0.005),
+    )
+
+    # Dashboard target
+    dt = raw.get("target", {}).get("dashboard", {})
+    dashboard_target = DashboardTargetConfig(
+        horizons=dt.get("horizons", [1, 5, 10]),
+    )
+
+    # Feature selection
+    fs = feat.get("selection", {})
+    _default_protected = [
+        "spy_", "qqq_", "ieur_", "vix_", "us10y_", "dxy_",
+        "rel10_", "zscore_ret10d_cross", "rank_volume_cross",
+    ]
+    feature_selection = FeatureSelectionConfig(
+        correlation_threshold=fs.get("correlation_threshold", 0.90),
+        importance_top_k=fs.get("importance_top_k", None),
+        protected_prefixes=fs.get("protected_prefixes", _default_protected),
+    )
 
     return PipelineConfig(
         timezone=proj.get("timezone", "Asia/Shanghai"),
@@ -97,14 +156,17 @@ def load_config(path: Path) -> PipelineConfig:
         universe_core=data.get(
             "universe_core", data.get("universe", ["510300.SS", "510500.SS"])
         ),
-        universe_optional=data.get("universe_optional", ["588000.SS"]),
+        universe_optional=data.get("universe_optional", []),
+        unseen_etfs=data.get("unseen_etfs", ["512880.SS", "159919.SZ"]),
         cross_market=data.get(
             "cross_market_features", data.get("cross_market", ["SPY", "QQQ", "IEUR"])
         ),
+        global_risk=data.get("global_risk", ["VIX", "TNX", "DXY"]),
         lookback_windows=feat.get("lookback_windows", [5, 10, 20]),
-        target_definition=tgt.get("definition", "open_to_prev_close_log_return"),
-        target_horizon=tgt.get("horizon", 1),
-        top_k_features=feat.get("top_k_features", None),
+        barrier=barrier,
+        gate=gate,
+        dashboard_target=dashboard_target,
+        feature_selection=feature_selection,
     )
 
 
@@ -128,4 +190,22 @@ def load_model_config(path: Path) -> ModelConfig:
         model_dir=m.get("model_dir", "models"),
         output_dir=m.get("output_dir", "outputs"),
         seed=seed,
+    )
+
+
+def load_backtest_config(path: Path) -> BacktestConfig:
+    """Parse [backtest] section from TOML and return BacktestConfig."""
+
+    raw_bytes = path.read_bytes()
+    if raw_bytes.startswith(b"\xef\xbb\xbf"):
+        raw_bytes = raw_bytes[3:]
+    raw = tomllib.loads(raw_bytes.decode("utf-8"))
+
+    b = raw.get("backtest", {})
+    return BacktestConfig(
+        initial_cash=b.get("initial_cash", 1_000_000.0),
+        fee_bps=b.get("fee_bps", 5.0),
+        slippage_bps=b.get("slippage_bps", 3.0),
+        max_gross_leverage=b.get("max_gross_leverage", 1.0),
+        risk_free_rate=b.get("risk_free_rate", 0.02),
     )

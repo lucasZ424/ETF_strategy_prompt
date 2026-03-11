@@ -1,54 +1,68 @@
-"""Volatility features: squared return, abs return, rolling std, ATR, realised vol.
+"""Volatility features for the v3 trade branch.
 
-Every feature on row T uses only data from T-1 and earlier.
+All features on row T use only data from T-1 and earlier.
+Closing-price dynamics use adj_close per trade-branch convention.
+
+Produces:
+  rv5_adj   — rolling std of 1d adj log return over 5 bars (lagged)
+  rv10_adj  — rolling std over 10 bars (lagged)
+  rv20_adj  — rolling std over 20 bars (lagged)
+  atr14_over_adj — ATR(14) / adj_close (lagged, normalized)
+  hl_range_adjproxy — (high - low) / adj_close (lagged)
 """
 
 from __future__ import annotations
 
-from typing import List
+import logging
 
 import numpy as np
 import pandas as pd
 import talib
 
+logger = logging.getLogger(__name__)
 
-def add_volatility_features(
-    df: pd.DataFrame,
-    windows: List[int],
-) -> pd.DataFrame:
-    """Add volatility features per symbol (all lagged by 1 day)."""
+
+def add_volatility_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add all v3 volatility features per symbol (all lagged by 1 day).
+
+    Parameters
+    ----------
+    df : DataFrame with columns: symbol, date, adj_close, high, low, open, volume.
+    """
 
     df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
 
-    # Adj-close-to-adj-close log return, then lag it by 1
+    # 1d adj-close log return, then lag by 1
     df["_log_ret"] = df.groupby("symbol")["adj_close"].transform(
         lambda s: np.log(s / s.shift(1))
     )
     df["_lr_lag"] = df.groupby("symbol")["_log_ret"].shift(1)
 
-    df["ret_sq"] = df["_lr_lag"] ** 2
-    df["ret_abs"] = df["_lr_lag"].abs()
-
-    for w in windows:
-        df[f"rolling_std_{w}"] = df.groupby("symbol")["_lr_lag"].transform(
+    # Rolling std of lagged 1d returns at 5, 10, 20 windows
+    for w in [5, 10, 20]:
+        df[f"rv{w}_adj"] = df.groupby("symbol")["_lr_lag"].transform(
             lambda s, _w=w: s.rolling(_w, min_periods=_w).std()
         )
-        df[f"realized_vol_{w}"] = df.groupby("symbol")["_lr_lag"].transform(
-            lambda s, _w=w: (s**2).rolling(_w, min_periods=_w).sum().pipe(np.sqrt)
+
+    # ATR(14) via TA-Lib: compute per symbol on raw OHLC, then shift by 1 and normalize
+    atr_parts = []
+    for _, g in df.groupby("symbol"):
+        atr_vals = talib.ATR(
+            g["high"].values, g["low"].values,
+            g["adj_close"].values, timeperiod=14,
         )
+        atr_parts.append(pd.Series(atr_vals, index=g.index))
+    df["_atr14_raw"] = pd.concat(atr_parts).sort_index()
 
-    # ATR via TA-Lib: compute on raw OHLC per symbol, then shift by 1
-    for w in windows:
-        atr_parts = []
-        for _, g in df.groupby("symbol"):
-            atr_vals = talib.ATR(
-                g["high"].values, g["low"].values,
-                g["adj_close"].values, timeperiod=w,
-            )
-            atr_parts.append(pd.Series(atr_vals, index=g.index))
-        df[f"_atr_raw_{w}"] = pd.concat(atr_parts).sort_index()
-        df[f"atr_{w}"] = df.groupby("symbol")[f"_atr_raw_{w}"].shift(1)
-        df = df.drop(columns=[f"_atr_raw_{w}"])
+    lagged_adj = df.groupby("symbol")["adj_close"].shift(1)
+    df["atr14_over_adj"] = df.groupby("symbol")["_atr14_raw"].shift(1) / lagged_adj
 
-    df = df.drop(columns=["_log_ret", "_lr_lag"])
+    # High-low range normalized by adj_close (lagged by 1)
+    lagged_high = df.groupby("symbol")["high"].shift(1)
+    lagged_low = df.groupby("symbol")["low"].shift(1)
+    df["hl_range_adjproxy"] = (lagged_high - lagged_low) / lagged_adj
+
+    # Cleanup temporary columns
+    df = df.drop(columns=["_log_ret", "_lr_lag", "_atr14_raw"])
+
     return df

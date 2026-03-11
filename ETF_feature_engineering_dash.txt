@@ -1,0 +1,190 @@
+ETF Feature Engineering — Dashboard Forecast Pipeline
+=====================================================
+
+Scope
+-----
+This file is exclusive to the dashboard forecast branch.
+It is intentionally separate from the trade feature file so that the investor-
+facing close-price forecast logic stays clean and does not inherit ranking- or
+gating-specific design choices.
+
+Dashboard objective
+-------------------
+- One shared model artifact
+- Multi-horizon outputs for 1d / 3d / 5d forecast display
+- Official displayed forecast target = raw Close price
+
+Important target convention
+---------------------------
+The dashboard displays raw Close forecasts, but the model should preferably be
+trained on horizon-specific log-return-to-close targets and then converted back
+to raw Close for display.
+
+Recommended internal targets:
+    y1 = log(Close_{t+1} / Close_t)
+    y3 = log(Close_{t+3} / Close_t)
+    y5 = log(Close_{t+5} / Close_t)
+
+Then displayed forecast:
+    Close_hat_{t+h} = Close_t * exp(yhat_h)
+
+Reason:
+- this preserves raw Close as the frontend output
+- but gives a more stable and scalable supervised learning target than directly
+  regressing raw Close across ETFs with different price levels
+
+Design structure
+----------------
+This file is divided into:
+1. Shared dashboard features
+2. Dashboard-specific features
+
+"Shared" here means reusable within all 1d / 3d / 5d dashboard horizons.
+It does NOT mean shared with the trade file. Trade-specific design lives in the
+separate trade feature file.
+
+Notation
+--------
+Let:
+- C_t       = raw Close at date t
+- H_t, L_t  = High, Low
+- O_t       = Open
+- V_t       = Volume
+- eps       = small constant for numerical safety
+
+Why "Log Close" is included here
+---------------------------------
+In the dashboard branch, "Log Close" is used explicitly as:
+
+    log_close = log(Close)
+
+Necessity:
+1. It stabilizes the price-level scale across ETFs.
+2. It makes short-horizon trend shape easier to represent.
+3. It allows one shared model to learn 1d / 3d / 5d movements without being too
+   dominated by nominal price level differences.
+4. It is most useful as a primitive for lag, slope, and return construction,
+   not as a standalone magical predictor.
+
+Feature table — Shared dashboard features
+-----------------------------------------
+Category | Feature Name | Variable Name | Formula / Construction | Status | Rationale
+
+1. Core raw-close primitives
+----------------------------
+Core Price | Raw close | close | raw input series | [fixed] | official dashboard output basis
+Core Price | Log close | log_close | log(close) | [keep] | stabilized price-path primitive
+Core Price | 1d log return | ret1_close | log(C_t / C_{t-1}) | [keep] | immediate price movement state
+Core Price | 3d log return | ret3_close | log(C_t / C_{t-3}) | [keep] | short-horizon movement state
+Core Price | 5d log return | ret5_close | log(C_t / C_{t-5}) | [keep] | medium-short movement state
+Core Price | 10d log return | ret10_close | log(C_t / C_{t-10}) | [screen] | broader short-term context
+
+2. Lagged price-path block
+--------------------------
+Lagged Path | Lagged log close 1 | log_close_lag1 | log_close shifted by 1 | [keep] | direct recent path memory
+Lagged Path | Lagged log close 2 | log_close_lag2 | log_close shifted by 2 | [keep] | short path reconstruction
+Lagged Path | Lagged log close 3 | log_close_lag3 | log_close shifted by 3 | [keep] | 3-day path context
+Lagged Path | Lagged log close 5 | log_close_lag5 | log_close shifted by 5 | [keep] | 5-day path context
+Lagged Path | Lagged log close 10 | log_close_lag10 | log_close shifted by 10 | [screen] | slightly broader path memory
+
+3. Trend-shape block
+--------------------
+Trend | MA 5 ratio | close_over_ma5 | C_t / ma5_close | [keep] | short local trend distance
+Trend | MA 10 ratio | close_over_ma10 | C_t / ma10_close | [keep] | medium-short trend distance
+Trend | MA 20 ratio | close_over_ma20 | C_t / ma20_close | [keep] | broader trend distance
+Trend | EMA ratio | ema5_over_ema20 | ema5_close / ema20_close | [keep] | smooth short vs medium trend relationship
+Trend | MA ratio | ma5_over_ma20 | ma5_close / ma20_close | [keep] | local trend steepness proxy
+Trend | Rolling slope 5 | slope5_close | OLS slope of log_close over last 5 bars | [keep] | directional slope for 1d/3d/5d outputs
+Trend | Rolling slope 10 | slope10_close | OLS slope of log_close over last 10 bars | [screen] | broader local slope
+
+4. Volatility / uncertainty block
+---------------------------------
+Volatility | Rolling std 5 | rv5_close | rolling_std(ret1_close, 5) | [keep] | local uncertainty context
+Volatility | Rolling std 10 | rv10_close | rolling_std(ret1_close, 10) | [keep] | medium-short uncertainty
+Volatility | ATR 14 scaled | atr14_over_close | ATR(14) / close | [keep] | normalized range volatility
+Volatility | High-low range | hl_range_close | (H_t - L_t) / C_t | [keep] | intraday movement context
+Volatility | Open-close gap | gap_oc_prev_close | log(O_t / C_{t-1}) | [screen] | overnight move context
+
+5. Volume block
+---------------
+Volume | Log volume | log_volume | log(V_t + 1) | [screen] | stabilized activity primitive
+Volume | Volume z-score 20 | vol_z20 | (V_t - vol_ma20) / rolling_std(V,20) | [keep] | unusual trading activity state
+Volume | Volume MA ratio 20 | vol_ma_ratio20 | V_t / vol_ma20 | [keep] | relative activity level
+
+6. Cross-market context block
+-----------------------------
+Cross-Market | SPY lagged return | spy_ret_lag1 | lagged market-aligned return | [screen] | optional broad market spillover
+Cross-Market | QQQ lagged return | qqq_ret_lag1 | lagged market-aligned return | [screen] | optional growth/tech spillover
+Cross-Market | IEUR lagged return | ieur_ret_lag1 | lagged market-aligned return | [screen] | optional Europe spillover
+Global Risk | VIX change lag | vix_chg_lag1 | lagged change in ^VIX | [screen] | optional risk sentiment context
+Global Risk | DXY return lag | dxy_ret_lag1 | lagged DXY log return | [screen] | optional macro stress context
+
+7. Calendar block
+-----------------
+Calendar | Day of week | dow | trading-day categorical encoding | [screen] | possible short-horizon seasonality
+Calendar | Month | month | month categorical encoding | [screen] | optional seasonal effect
+
+Dashboard-specific feature notes
+--------------------------------
+1. This branch uses raw Close because the frontend is supposed to show the
+   visible market price investors recognize.
+2. Unlike the trade branch, this branch does not include ranking-only features
+   such as cross-sectional return z-scores or ternary gate support variables.
+3. The dashboard branch should remain horizon-agnostic enough for one shared
+   1d / 3d / 5d model, so highly specialized single-horizon features should be
+   introduced cautiously.
+
+Recommended baseline dashboard feature set
+------------------------------------------
+1. log_close
+2. ret1_close
+3. ret3_close
+4. ret5_close
+5. log_close_lag1
+6. log_close_lag2
+7. log_close_lag3
+8. log_close_lag5
+9. close_over_ma5
+10. close_over_ma10
+11. close_over_ma20
+12. ema5_over_ema20
+13. ma5_over_ma20
+14. slope5_close
+15. rv5_close
+16. rv10_close
+17. atr14_over_close
+18. hl_range_close
+19. vol_z20
+20. vol_ma_ratio20
+21. spy_ret_lag1
+22. qqq_ret_lag1
+23. ieur_ret_lag1
+24. vix_chg_lag1
+25. dxy_ret_lag1
+26. dow
+27. month
+
+Feature selection implementation logic
+--------------------------------------
+A. Pearson correlation filter
+- Apply within the dashboard feature set only.
+- Recommended start threshold: |corr| >= 0.90.
+- Remove one of each highly redundant pair based on interpretability and
+  horizon-wise validation benefit.
+
+B. Shared-model usefulness check
+- Even though one shared model is used for 1d / 3d / 5d outputs, check whether
+  a feature helps all horizons or mainly one horizon.
+- Keep features that are stable enough across the multi-horizon task.
+
+C. Close-output rule
+- Raw Close is the official displayed forecast quantity.
+- Internal modeling via log-return-to-close is recommended, but final output is
+  always converted back to raw Close.
+
+Frozen decisions reflected here
+-------------------------------
+1. Dashboard branch is separated from the trade feature file.
+2. Dashboard uses raw Close, not Adj Close, for output and close-based features.
+3. One shared model artifact is preferred for 1d / 3d / 5d forecasts.
+4. Separate horizon-specific models are postponed unless the shared model proves inadequate.

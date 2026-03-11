@@ -30,8 +30,11 @@ def main() -> None:
     )
 
     config = load_config(args.config)
-    output_path = run_pipeline(config, PROJECT_ROOT)
-    print(f"\nPipeline complete. Output: {output_path}")
+    output_paths = run_pipeline(config, PROJECT_ROOT)
+
+    print("\nPipeline complete. Outputs:")
+    for name, path in output_paths.items():
+        print(f"  {name}: {path}")
 
 
 if __name__ == "__main__":

@@ -1,12 +1,11 @@
-"""Evaluation package."""
+"""Evaluation package: ranking metrics."""
 
-from .metrics import RegressionMetrics, compute_metrics
-from .signal import SignalConfig, generate_forecasts, optimize_threshold
+from .metrics import (
+    RankerMetrics,
+    compute_ranker_metrics,
+)
 
 __all__ = [
-    "RegressionMetrics",
-    "SignalConfig",
-    "compute_metrics",
-    "generate_forecasts",
-    "optimize_threshold",
+    "RankerMetrics",
+    "compute_ranker_metrics",
 ]

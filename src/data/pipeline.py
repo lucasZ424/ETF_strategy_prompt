@@ -1,4 +1,4 @@
-"""End-to-end data processing pipeline: raw CSV → processed parquet."""
+"""End-to-end data processing pipeline: raw CSV → 3 processed datasets."""
 
 from __future__ import annotations
 
@@ -9,15 +9,20 @@ from src.config import PipelineConfig
 from src.data.cleaner import clean_china_etfs, clean_cross_market
 from src.data.cross_market import align_cross_market_to_china
 from src.data.loader import load_china_etfs, load_cross_market_etfs
-from src.features.builder import build_all_features
+from src.features.builder import TradeDatasets, build_trade_features
 
 logger = logging.getLogger(__name__)
 
 
-def run_pipeline(config: PipelineConfig, project_root: Path) -> Path:
+def run_pipeline(config: PipelineConfig, project_root: Path) -> dict[str, Path]:
     """Execute the full data processing pipeline.
 
-    1. Load raw CSVs  2. Clean  3. Align cross-market  4. Build features  5. Save
+    1. Load raw CSVs  2. Clean  3. Align cross-market
+    4. Build shared backbone  5. Emit 3 dataset views  6. Save
+
+    Returns
+    -------
+    dict mapping dataset name → parquet path
     """
 
     raw_dir = project_root / config.raw_dir
@@ -45,21 +50,32 @@ def run_pipeline(config: PipelineConfig, project_root: Path) -> Path:
         china_dates, cross_clean, config.cross_market, raw_dir=raw_dir
     )
 
-    # 4. Build features
-    logger.info("=== Building features ===")
-    processed = build_all_features(
-        china_clean, cross_aligned, config.lookback_windows,
-        top_k_features=config.top_k_features,
-        cross_symbols=config.cross_market,
+    # 4-5. Build shared backbone → 3 dataset views
+    logger.info("=== Building trade feature backbone ===")
+    datasets: TradeDatasets = build_trade_features(
+        china_clean,
+        cross_aligned,
+        feature_selection=config.feature_selection,
+        seed=config.seed,
+        cost_threshold=config.gate.cost_threshold,
+        gap_threshold=config.gate.gap_threshold,
     )
 
-    # 5. Save
-    parquet_path = processed_dir / "features_v1.parquet"
-    processed.to_parquet(parquet_path, index=False)
-    logger.info("Saved parquet: %s (%d rows, %d cols)", parquet_path, len(processed), len(processed.columns))
+    # 6. Save all datasets
+    output_paths: dict[str, Path] = {}
 
-    csv_path = processed_dir / "features_v1.csv"
-    processed.to_csv(csv_path, index=False)
-    logger.info("Saved CSV: %s", csv_path)
+    for name, df in [
+        ("alpha_features", datasets.alpha),
+        ("gate_features", datasets.gate),
+        ("regime_features", datasets.regime),
+        ("backbone", datasets.backbone),
+    ]:
+        parquet_path = processed_dir / f"{name}.parquet"
+        df.to_parquet(parquet_path, index=False)
+        logger.info(
+            "Saved %s: %s (%d rows, %d cols)",
+            name, parquet_path, len(df), len(df.columns),
+        )
+        output_paths[name] = parquet_path
 
-    return parquet_path
+    return output_paths

@@ -8,12 +8,15 @@ import pandas as pd
 import yfinance as yf
 
 
-# Smallest practical core set with long history and style diversity.
-# - 510050.SS: SSE 50 (mega-cap)
-# - 510300.SS: CSI 300 (broad large-cap)
-# - 510500.SS: CSI 500 (mid/small-cap)
-# - 159915.SZ: ChiNext (growth/innovation)
-CHINA_ETFS = ["510050.SS", "510300.SS", "510500.SS", "159915.SZ","588000.SS"]
+# Expanded core universe (12 ETFs) — diverse style/sector coverage.
+CHINA_ETFS = [
+    "510050.SS", "510300.SS", "510500.SS", "512100.SS", "510880.SS", "588000.SS",
+    "159915.SZ", "513130.SS", "512690.SS", "512170.SS", "512480.SS",
+    "516160.SS", "518880.SS",
+]
+
+# Unseen ETFs for out-of-sample testing (fetched separately).
+UNSEEN_ETFS = ["512880.SS", "159919.SZ"]
 
 # Cross-market ETFs for feature engineering (lagged, timezone-aligned to China decision time).
 CROSS_MARKET_ETFS = ["SPY", "QQQ", "IEUR"]
@@ -85,6 +88,21 @@ def main() -> None:
     cross_summary.to_csv(cross_dir / "selection_summary.csv", index=False)
     print("\n=== Cross-market ETFs ===")
     print(cross_summary.to_string(index=False))
+
+    # --- Unseen ETFs (out-of-sample) ---
+    unseen_dir = root / "data" / "raw" / "unseen_etfs"
+    unseen_dir.mkdir(parents=True, exist_ok=True)
+
+    unseen_rows = []
+    for ticker in UNSEEN_ETFS:
+        frame = fetch_one(ticker, START_DATE, END_DATE)
+        frame.to_csv(unseen_dir / f"{ticker}.csv", index=False)
+        unseen_rows.append(_summarize(frame, ticker))
+
+    unseen_summary = pd.DataFrame(unseen_rows).sort_values("ticker")
+    unseen_summary.to_csv(unseen_dir / "selection_summary.csv", index=False)
+    print("\n=== Unseen ETFs (OOS) ===")
+    print(unseen_summary.to_string(index=False))
 
 
 if __name__ == "__main__":

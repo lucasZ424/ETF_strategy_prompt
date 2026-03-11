@@ -1,13 +1,11 @@
-"""Models package."""
+"""Models package: chronological splitter + training utilities."""
 
 from .splitter import SplitResult, chronological_split
-from .trainer import TrainResult, safe_feature_array, save_model, train_xgboost
+from .trainer import get_feature_cols, safe_X
 
 __all__ = [
     "SplitResult",
-    "TrainResult",
     "chronological_split",
-    "safe_feature_array",
-    "save_model",
-    "train_xgboost",
+    "get_feature_cols",
+    "safe_X",
 ]

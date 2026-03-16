@@ -103,7 +103,7 @@ C. Core market and external context
   US/EU ETFs and macro risk proxies with strict lag alignment.
 
 Representative universe for current pilot:
-- China core: 510050.SS,510300.SS,510500.SS,512100.SS,510880.SS,588000.SS,159915.SZ,513130.SS,512690.SS,512170.SS,512480.SS,516160.SS,518880.SS
+- China core: 510050.SS,510300.SS,510500.SS,510880.SS,588000.SS,159915.SZ,513130.SS,512690.SS,512170.SS,512480.SS,516160.SS,518880.SS
 
 - Cross-market context: SPY, QQQ, IEUR
 
@@ -237,10 +237,10 @@ Tasks:
 4. Freeze target/label definitions in config.
 
 Alpha target definition:
-- Let close_t be the ETF close at day t.
-- Let close_t+10 be the ETF close 10 trading days ahead.
-- Define forward 10-day log return:
-    y_alpha_t = log(close_t+10 / close_t)
+- Let adj_close_t be the ETF adjusted close at day t.
+- Let adj_close_t+10 be the ETF adjusted close 10 trading days ahead.
+- Define forward 10-day adjusted log return:
+    y_alpha_t = log(adj_close_t+10 / adj_close_t)
 - Recompute this target daily so the model sees a daily-updated 10-day
   opportunity score rather than a blind fixed holding rule.
 
@@ -408,17 +408,6 @@ Exit criteria:
 - The frontend can request a symbol and receive both price forecasts and the
   trading-outlook panel from versioned artifacts.
 
-
-Phase 7: TCN Upgrade Benchmark (conditional)
-
-Tasks:
-1. Train TCN temporal encoder on rolling sequence windows.
-2. Extract temporal embedding artifacts.
-3. Retrain alpha, gate, and regime models with:
-   - selected engineered features
-   - cross-market / macro block
-   - TCN embeddings where justified
-4. Compare against the XGBoost-first baseline.
 
 Upgrade acceptance criteria:
 - TCN branch is adopted only if it improves out-of-sample behavior with stable,

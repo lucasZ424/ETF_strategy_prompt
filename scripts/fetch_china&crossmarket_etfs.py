@@ -10,7 +10,7 @@ import yfinance as yf
 
 # Expanded core universe (12 ETFs) — diverse style/sector coverage.
 CHINA_ETFS = [
-    "510050.SS", "510300.SS", "510500.SS", "512100.SS", "510880.SS", "588000.SS",
+    "510050.SS", "510300.SS", "510500.SS", "510880.SS", "588000.SS",
     "159915.SZ", "513130.SS", "512690.SS", "512170.SS", "512480.SS",
     "516160.SS", "518880.SS",
 ]
@@ -20,6 +20,10 @@ UNSEEN_ETFS = ["512880.SS", "159919.SZ"]
 
 # Cross-market ETFs for feature engineering (lagged, timezone-aligned to China decision time).
 CROSS_MARKET_ETFS = ["SPY", "QQQ", "IEUR"]
+
+# Global risk indicators — saved into cross_market/ dir alongside ETFs.
+# (save_name, yfinance_ticker) pairs.
+GLOBAL_RISK = [("VIX", "^VIX"), ("TNX", "^TNX"), ("DXY", "DX-Y.NYB")]
 
 START_DATE = "2015-01-01"
 END_DATE = "2025-12-31"
@@ -88,6 +92,14 @@ def main() -> None:
     cross_summary.to_csv(cross_dir / "selection_summary.csv", index=False)
     print("\n=== Cross-market ETFs ===")
     print(cross_summary.to_string(index=False))
+
+    # --- Global risk indicators (VIX, TNX, DXY) ---
+    # Saved into the same cross_market/ directory so cross_market.py can find them.
+    print("\n=== Global Risk Indicators ===")
+    for save_name, yf_ticker in GLOBAL_RISK:
+        frame = fetch_one(yf_ticker, START_DATE, END_DATE)
+        frame.to_csv(cross_dir / f"{save_name}.csv", index=False)
+        print(f"  {save_name} ({yf_ticker}): {len(frame)} rows")
 
     # --- Unseen ETFs (out-of-sample) ---
     unseen_dir = root / "data" / "raw" / "unseen_etfs"

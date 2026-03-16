@@ -1,0 +1,620 @@
+DB Migration Instruction
+========================
+
+Purpose
+-------
+This file provides a phased implementation plan for migrating the project from
+local raw CSV / processed parquet files to a local database-centered data plane.
+
+Target architecture
+-------------------
+- Local database as the canonical source for market data and dashboard-serving
+  data.
+- File artifacts remain allowed for model bundles, reports, plots, and
+  experiment outputs.
+- Grafana reads from the local database.
+- Research and training pipelines are gradually migrated so the project does
+  not break mid-transition.
+
+Non-negotiable migration rules
+------------------------------
+1. Preserve current no-lookahead rules, especially cross-market alignment.
+2. Do not change model logic and feature formulas during storage migration.
+3. Keep a deterministic feature contract between training and inference.
+4. Preserve run traceability for model training, feature selection, and output
+   metrics.
+5. Migrate in adapter layers first, not by rewriting the whole project at once.
+
+Recommended database scope
+--------------------------
+Start with a local PostgreSQL database.
+
+Reason:
+- Cleaner long-term schema management than SQLite for multi-table time-series.
+- Grafana support is straightforward.
+- Easier future upgrade path if the local system later becomes a service.
+
+If PostgreSQL setup becomes a blocker, SQLite can be used for Phase 1-2 only,
+but PostgreSQL is the recommended end state.
+
+Core migration strategy
+-----------------------
+Split the migration into 3 storage layers:
+
+1. Raw market data layer
+- Replace `data/raw/*.csv` as the canonical source.
+
+2. Processed feature / target layer
+- Replace `data/processed/*.parquet` as the canonical source.
+
+3. Serving layer
+- Add prediction snapshots, latest forecast views, and metadata tables for
+  Grafana.
+
+Do not migrate all 3 layers at once.
+
+
+Phase 0 - Freeze Contracts and Inventory Current IO
+===================================================
+
+Goal
+----
+Define exactly what the database must reproduce before any code rewrite starts.
+
+Tasks
+-----
+1. Freeze the current canonical column contracts for:
+   - China ETF raw bars
+   - Cross-market ETF raw bars
+   - Global risk series
+   - Processed backbone
+   - Dashboard features
+   - Dashboard targets
+   - Alpha / gate / regime datasets
+
+2. Inventory all file IO touch points in current code.
+   Current critical locations:
+   - `src/data/loader.py`
+   - `src/data/pipeline.py`
+   - `src/data/cross_market.py`
+   - `scripts/build_targets.py`
+   - `scripts/train_dashboard.py`
+   - `scripts/train_xgboost.py`
+   - `scripts/weekly_retrain.py`
+   - `scripts/backtest_dashboard.py`
+   - `scripts/run_backtest.py`
+
+3. Freeze the dashboard inference contract:
+   - feature builder output columns
+   - saved feature manifest
+   - feature ordering at inference time
+
+4. Decide the canonical symbol universe policy:
+   - core 12 China ETFs: 10 years
+   - cross-market and macro context series: 10 years
+   - non-core China ETFs: 1 year default
+   - optional lazy backfill for longer history
+
+Deliverables
+------------
+1. This migration instruction file.
+2. A schema contract note listing required raw and processed columns.
+3. A simple architecture decision note confirming PostgreSQL vs SQLite.
+
+Exit criteria
+-------------
+- You can describe every current file-based read/write point.
+- You can state exactly which tables will replace which directories/files.
+
+
+Phase 1 - Database Schema Design
+================================
+
+Goal
+----
+Design the database before changing loaders.
+
+Recommended table set
+---------------------
+1. `instrument_master`
+- `instrument_id`
+- `symbol`
+- `market`
+- `asset_type`
+- `name`
+- `is_core_training`
+- `is_cross_market`
+- `is_macro_proxy`
+- `history_policy_years`
+- `is_active`
+- `created_at`
+- `updated_at`
+
+2. `daily_bars`
+- `instrument_id`
+- `symbol`
+- `trade_date`
+- `open`
+- `high`
+- `low`
+- `close`
+- `adj_close`
+- `volume`
+- `data_source`
+- `loaded_at`
+
+Primary key:
+- (`symbol`, `trade_date`)
+
+Indexes:
+- (`symbol`, `trade_date`)
+- (`trade_date`)
+
+3. `data_fetch_log`
+- `fetch_id`
+- `symbol`
+- `fetch_start_date`
+- `fetch_end_date`
+- `rows_inserted`
+- `rows_updated`
+- `status`
+- `error_message`
+- `fetched_at`
+
+4. `processed_dataset_registry`
+- `dataset_name`
+- `dataset_version`
+- `source_run_id`
+- `row_count`
+- `created_at`
+- `notes`
+
+5. `model_runs`
+- `run_id`
+- `model_name`
+- `model_version`
+- `config_path`
+- `train_start_date`
+- `train_end_date`
+- `val_start_date`
+- `val_end_date`
+- `test_start_date`
+- `test_end_date`
+- `created_at`
+
+6. `prediction_snapshots`
+- `prediction_id`
+- `run_id`
+- `model_name`
+- `model_version`
+- `asof_date`
+- `prediction_time`
+- `symbol`
+- `current_close`
+- `y_close_1d_pred`
+- `y_close_3d_pred`
+- `y_close_5d_pred`
+- `feature_manifest_version`
+- `data_freshness_time`
+
+7. `dashboard_metrics_history`
+- `run_id`
+- `model_version`
+- `horizon_name`
+- `mse`
+- `rmse`
+- `mae`
+- `mape`
+- `r2`
+- `n_rows`
+- `created_at`
+
+Design rules
+------------
+1. Keep raw bars normalized in one table.
+2. Keep derived processed datasets reproducible from raw bars.
+3. Do not store every temporary feature table permanently at first unless query
+   performance later requires materialization.
+4. Persist dashboard prediction snapshots because Grafana needs them directly.
+
+Exit criteria
+-------------
+- Schema is finalized.
+- Primary keys and indexes are defined.
+- Raw, processed, and serving responsibilities are separated.
+
+
+Phase 2 - Add Database Access Layer Without Breaking Files
+==========================================================
+
+Goal
+----
+Introduce a storage abstraction while preserving current behavior.
+
+Tasks
+-----
+1. Create a database module, for example:
+   - `src/data/db.py`
+   - `src/data/repository.py`
+
+2. Add configuration for database connection:
+   - database URL
+   - active storage backend (`file`, `db`, `hybrid`)
+
+3. Implement repository functions for:
+   - upsert daily bars
+   - load China ETF bars by symbol list and date range
+   - load cross-market bars by symbol list and date range
+   - load macro proxy series by date range
+   - load available history metadata per symbol
+
+4. Keep existing file loaders as fallback adapters.
+
+5. Refactor `src/data/loader.py` so public loader functions become backend-
+   agnostic entry points instead of direct CSV readers.
+
+Recommended pattern
+-------------------
+Public API remains stable:
+- `load_china_etfs(...)`
+- `load_cross_market_etfs(...)`
+- `load_unseen_etfs(...)`
+
+Internally dispatch by config:
+- file backend -> current CSV logic
+- db backend -> SQL query logic
+- hybrid backend -> DB first, fallback to file if missing
+
+Exit criteria
+-------------
+- No training script interface changes yet.
+- Pipeline can still run using files only.
+- Pipeline can also load raw data from DB with the same returned DataFrame
+  schema.
+
+
+Phase 3 - Migrate Raw Daily Fetch Into Database
+===============================================
+
+Goal
+----
+Make the DB the canonical raw market data source.
+
+Tasks
+-----
+1. Replace append-to-CSV behavior in `scripts/weekly_retrain.py`.
+2. Build a daily fetch job that:
+   - pulls core 12 China ETFs for 10 years initially
+   - pulls cross-market and macro series for 10 years initially
+   - pulls non-core ETF history for 1 year on demand
+   - upserts into `daily_bars`
+   - logs results into `data_fetch_log`
+
+3. Build a one-time historical backfill script:
+   - core training universe
+   - cross-market ETFs
+   - macro proxies
+
+4. Add a symbol onboarding script:
+   - insert new ETF into `instrument_master`
+   - fetch 1 year by default
+   - optionally extend history lazily
+
+5. Add freshness checks:
+   - latest trade date per symbol
+   - missing expected date detection
+   - fetch failure logging
+
+Important rule
+--------------
+Do not delete raw CSV storage immediately.
+Keep it as rollback until the DB fetch path is stable for multiple runs.
+
+Exit criteria
+-------------
+- Daily fetch updates DB correctly.
+- Existing pipeline can read from DB and reproduce the same raw DataFrames.
+- Core training universe no longer depends on CSV freshness.
+
+
+Phase 4 - Migrate Cross-Market Alignment and Raw Preprocessing
+==============================================================
+
+Goal
+----
+Make raw preprocessing database-native while preserving feature semantics.
+
+Tasks
+-----
+1. Refactor `src/data/cross_market.py` to accept DataFrames loaded from DB
+   rather than assuming CSV-backed sourcing.
+
+2. Ensure macro proxy series (`VIX`, `TNX`, `DXY`) also come through the DB
+   repository layer.
+
+3. Validate that strict lag alignment to China dates remains unchanged.
+
+4. Add comparison checks:
+   - file-based cross-aligned output vs DB-based cross-aligned output
+   - row counts
+   - date coverage
+   - selected feature columns exact equality where possible
+
+Exit criteria
+-------------
+- Cross-market aligned DataFrame from DB matches current file-based behavior.
+- No lookahead regressions are introduced.
+
+
+Phase 5 - Migrate Processed Pipeline Outputs
+============================================
+
+Goal
+----
+Replace parquet as the canonical processed data store, but keep file export for
+inspection and debugging.
+
+Tasks
+-----
+1. Decide processed storage policy:
+   Option A:
+   - store only raw bars in DB
+   - recompute processed datasets on each training run
+
+   Option B:
+   - store processed datasets in DB tables as versioned materialized outputs
+
+2. Recommended first implementation:
+   - keep processed features recomputed on demand
+   - optionally persist only key outputs needed by Grafana or training traceability
+
+3. Refactor `src/data/pipeline.py`:
+   - current behavior writes parquet/csv
+   - new behavior should optionally also write processed outputs to DB tables
+   - file export remains optional for debugging
+
+4. Refactor `scripts/build_targets.py`:
+   - read backbone and regime inputs from DB or pipeline memory
+   - write targets to DB if processed persistence is enabled
+
+5. Add dataset versioning:
+   - run timestamp
+   - config hash
+   - source data date range
+
+Recommended processed tables if persisted
+-----------------------------------------
+- `backbone_features`
+- `alpha_features`
+- `gate_features`
+- `regime_features`
+- `dashboard_features`
+- `alpha_targets`
+- `barrier_labels`
+- `regime_labels`
+- `dashboard_targets`
+
+Warning
+-------
+Persisting all processed tables in DB increases migration surface area.
+Do this only after raw DB ingestion is stable.
+
+Exit criteria
+-------------
+- Training scripts can get processed inputs without relying on parquet.
+- Optional CSV/parquet exports remain available for notebook inspection.
+
+
+Phase 6 - Update Training Scripts for DB-First Operation
+========================================================
+
+Goal
+----
+Train models using DB-backed raw or processed data without changing model logic.
+
+Tasks
+-----
+1. Refactor `scripts/train_dashboard.py`:
+   - stop assuming dashboard targets are only in parquet
+   - load processed inputs through a repository or dataset service layer
+
+2. Refactor `scripts/train_xgboost.py` similarly for alpha/gate/regime inputs.
+
+3. Preserve current model bundle outputs:
+   - `models/*.joblib`
+   - feature manifests
+   - metadata JSON
+   - evaluation history JSON
+
+4. Preserve feature selection outputs:
+   - selected feature list
+   - Pearson dropped list
+   - importance ranking
+
+5. Optionally add DB persistence for:
+   - model run metadata
+   - evaluation metrics
+
+Important inference rule
+------------------------
+New ETF live inference must always use the saved feature manifest from the
+trained model bundle, not re-run feature selection on the fly.
+
+Exit criteria
+-------------
+- Dashboard and trading models can be trained with DB-backed inputs.
+- Saved model bundle format is unchanged.
+- New ETF inference still works against the preserved feature manifest.
+
+
+Phase 7 - Build Dashboard Serving Tables for Grafana
+====================================================
+
+Goal
+----
+Support the future local Grafana frontend.
+
+Tasks
+-----
+1. Add a prediction snapshot writer after dashboard inference / retrain.
+2. Store latest predictions in `prediction_snapshots`.
+3. Add SQL views or materialized views for Grafana:
+   - latest forecast per symbol
+   - historical EOD close curve per symbol
+   - latest forecast overlay for selected ETF
+   - model freshness
+   - last data refresh time
+
+Recommended views
+-----------------
+1. `vw_latest_dashboard_forecast`
+2. `vw_symbol_eod_curve`
+3. `vw_dashboard_model_status`
+4. `vw_forecast_vs_actual`
+
+Grafana use cases
+-----------------
+1. User chooses ETF symbol.
+2. Grafana plots 1-year EOD close curve from `daily_bars`.
+3. Grafana overlays the latest 1d / 3d / 5d predicted close points or lines.
+4. Grafana shows model version, data freshness, and error metrics.
+
+Exit criteria
+-------------
+- Grafana can serve a selected ETF EOD chart plus forecast overlay entirely
+  from the local DB.
+
+
+Phase 8 - Migrate Backtest and Unseen ETF Workflows
+===================================================
+
+Goal
+----
+Remove remaining file-only assumptions from research workflows.
+
+Tasks
+-----
+1. Refactor `scripts/backtest_dashboard.py` to load unseen ETF raw bars from
+   DB where available.
+
+2. Refactor `scripts/run_backtest.py`:
+   - avoid mandatory CSV reliance for unseen bar loading
+   - allow on-demand symbol fetch -> DB upsert -> inference
+
+3. Keep export files for plots and reports.
+
+4. Add a DB-backed workflow for:
+   - chosen ETF not in training universe
+   - fetch 1 year
+   - store in DB
+   - build features
+   - align to saved model feature manifest
+   - predict
+
+Exit criteria
+-------------
+- New ETF forecast and backtest flows do not depend on ad hoc CSV caches.
+
+
+Phase 9 - Validation, Testing, and Cutover
+==========================================
+
+Goal
+----
+Switch the project to DB-first safely.
+
+Tasks
+-----
+1. Add tests for:
+   - DB loader schema
+   - raw bars uniqueness
+   - cross-market lag alignment
+   - feature builder equality on file vs DB source
+   - prediction pipeline for a new ETF using saved manifest
+
+2. Run parallel validation:
+   - file pipeline result
+   - DB pipeline result
+   Compare:
+   - row counts
+   - date ranges
+   - selected feature columns
+   - target columns
+   - final model metrics
+
+3. Define cutover criteria:
+   - DB pipeline passes repeated weekly retrain runs
+   - dashboard inference matches file pipeline behavior
+   - Grafana queries are responsive locally
+
+4. Only after successful cutover:
+   - downgrade raw CSV to backup-only
+   - downgrade parquet to debug/export-only if desired
+
+Exit criteria
+-------------
+- DB is the canonical storage backend.
+- Files are no longer the primary dependency for retrain and dashboard serving.
+
+
+Implementation order summary
+============================
+
+Recommended execution order
+---------------------------
+1. Phase 0
+2. Phase 1
+3. Phase 2
+4. Phase 3
+5. Phase 4
+6. Phase 6 for dashboard branch first
+7. Phase 7
+8. Phase 5 if processed persistence is still needed
+9. Phase 8
+10. Phase 9
+
+Reason for this order
+---------------------
+- Raw DB ingestion and repository abstraction provide most of the long-term
+  value with the lowest immediate modeling risk.
+- Dashboard serving can be delivered before full processed-table migration.
+- Full processed-dataset persistence is optional and should be delayed until
+  clear operational need exists.
+
+
+Minimum viable migration path
+=============================
+
+If implementation time is tight, the minimum viable path is:
+
+1. Build PostgreSQL schema for `instrument_master`, `daily_bars`,
+   `data_fetch_log`, `prediction_snapshots`.
+2. Add DB repository layer.
+3. Migrate daily fetch to DB.
+4. Read raw data from DB for dashboard inference.
+5. Keep processed feature/target computation in memory.
+6. Persist prediction snapshots for Grafana.
+7. Keep model artifacts and reports on local files.
+
+This is the recommended first production-grade milestone for the local DB +
+Grafana design.
+
+
+Known risks
+===========
+
+1. Cross-market lag logic drift during migration.
+2. Silent schema mismatch between DB DataFrames and current file loaders.
+3. Over-migrating too early by storing every processed table permanently.
+4. Re-running feature selection during inference instead of using saved feature
+   manifests.
+5. Symbol-universe sprawl if non-core ETF onboarding is not controlled.
+
+
+Final instruction
+=================
+
+Do not start with a full file deletion or a full DB rewrite.
+First implement a backend-agnostic repository layer and migrate the raw daily
+bars into the DB. Once that is stable, attach dashboard inference and Grafana.
+Only then decide whether processed parquet datasets need to become DB-native.

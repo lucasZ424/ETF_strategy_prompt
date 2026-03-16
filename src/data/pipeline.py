@@ -1,4 +1,4 @@
-"""End-to-end data processing pipeline: raw CSV → 3 processed datasets."""
+"""End-to-end data processing pipeline: raw CSV → 4 processed datasets."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from src.data.cleaner import clean_china_etfs, clean_cross_market
 from src.data.cross_market import align_cross_market_to_china
 from src.data.loader import load_china_etfs, load_cross_market_etfs
 from src.features.builder import TradeDatasets, build_trade_features
+from src.features.dashboard_features import build_dashboard_features
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,11 @@ def run_pipeline(config: PipelineConfig, project_root: Path) -> dict[str, Path]:
         gap_threshold=config.gate.gap_threshold,
     )
 
-    # 6. Save all datasets
+    # 6. Build dashboard features (raw close-based)
+    logger.info("=== Building dashboard features ===")
+    dashboard_df = build_dashboard_features(china_clean, cross_aligned)
+
+    # 7. Save all datasets
     output_paths: dict[str, Path] = {}
 
     for name, df in [
@@ -69,9 +74,12 @@ def run_pipeline(config: PipelineConfig, project_root: Path) -> dict[str, Path]:
         ("gate_features", datasets.gate),
         ("regime_features", datasets.regime),
         ("backbone", datasets.backbone),
+        ("dashboard_features", dashboard_df),
     ]:
         parquet_path = processed_dir / f"{name}.parquet"
+        csv_path = processed_dir / f"{name}.csv"
         df.to_parquet(parquet_path, index=False)
+        df.to_csv(csv_path, index=False)
         logger.info(
             "Saved %s: %s (%d rows, %d cols)",
             name, parquet_path, len(df), len(df.columns),

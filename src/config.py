@@ -10,9 +10,9 @@ from typing import List
 
 @dataclass(frozen=True)
 class DashboardTargetConfig:
-    """Dashboard target: multi-horizon log-return-to-close."""
+    """Dashboard target: multi-horizon raw close-price forecast."""
 
-    horizons: List[int] = field(default_factory=lambda: [1, 5, 10])
+    horizons: List[int] = field(default_factory=lambda: [1, 3, 5])
 
 
 @dataclass(frozen=True)
@@ -23,6 +23,7 @@ class BarrierConfig:
     upper_multiplier: float = 1.0
     lower_multiplier: float = 1.0
     vol_lookback: int = 20
+    target_scaling: str = "daily"  # {"daily", "sqrt_horizon"}
 
 
 @dataclass(frozen=True)
@@ -58,7 +59,7 @@ class PipelineConfig:
     processed_dir: str = "data/processed"
     universe_core: List[str] = field(
         default_factory=lambda: [
-            "510050.SS", "510300.SS", "510500.SS", "512100.SS", "510880.SS", "588000.SS",
+            "510050.SS", "510300.SS", "510500.SS", "510880.SS", "588000.SS",
             "159915.SZ", "513130.SS", "512690.SS", "512170.SS", "512480.SS",
             "516160.SS", "518880.SS",
         ]
@@ -84,6 +85,9 @@ class ModelConfig:
     val_ratio: float = 0.15
     test_ratio: float = 0.15
     optuna_trials: int = 100
+    optuna_pruning: bool = True
+    optuna_pruner_startup_trials: int = 10
+    optuna_pruner_warmup_steps: int = 50
     early_stopping_patience: int = 10
     model_dir: str = "models"
     output_dir: str = "outputs"
@@ -120,6 +124,7 @@ def load_config(path: Path) -> PipelineConfig:
         upper_multiplier=b.get("upper_multiplier", 1.0),
         lower_multiplier=b.get("lower_multiplier", 1.0),
         vol_lookback=b.get("vol_lookback", 20),
+        target_scaling=b.get("target_scaling", "daily"),
     )
 
     # Gate config
@@ -186,6 +191,9 @@ def load_model_config(path: Path) -> ModelConfig:
         val_ratio=m.get("val_ratio", 0.15),
         test_ratio=m.get("test_ratio", 0.15),
         optuna_trials=m.get("optuna_trials", 100),
+        optuna_pruning=m.get("optuna_pruning", True),
+        optuna_pruner_startup_trials=m.get("optuna_pruner_startup_trials", 10),
+        optuna_pruner_warmup_steps=m.get("optuna_pruner_warmup_steps", 50),
         early_stopping_patience=m.get("early_stopping_patience", 10),
         model_dir=m.get("model_dir", "models"),
         output_dir=m.get("output_dir", "outputs"),

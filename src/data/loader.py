@@ -67,6 +67,49 @@ def load_china_etfs(
     return pooled
 
 
+def load_unseen_etfs(
+    data_dir: Path,
+    symbols: List[str] | None = None,
+) -> pd.DataFrame:
+    """Load unseen/user-specified ETF CSVs from data/unseen_etfs/.
+
+    Parameters
+    ----------
+    data_dir : project-level data directory (parent of unseen_etfs/).
+    symbols : explicit symbol list. If None, load all CSVs in the directory.
+
+    Returns
+    -------
+    Pooled DataFrame with same schema as load_china_etfs.
+    """
+    unseen_dir = data_dir / "unseen_etfs"
+    if not unseen_dir.exists():
+        raise FileNotFoundError(f"Unseen ETFs directory not found: {unseen_dir}")
+
+    if symbols is None:
+        csv_files = sorted(unseen_dir.glob("*.csv"))
+        symbols = [f.stem for f in csv_files]
+
+    frames: list[pd.DataFrame] = []
+    for sym in symbols:
+        csv_path = unseen_dir / f"{sym}.csv"
+        if not csv_path.exists():
+            logger.warning("CSV not found for unseen ETF %s at %s, skipping", sym, csv_path)
+            continue
+        frames.append(load_single_csv(csv_path, sym))
+
+    if not frames:
+        raise FileNotFoundError(f"No unseen ETF CSVs found in {unseen_dir}")
+
+    pooled = pd.concat(frames, ignore_index=True)
+    logger.info(
+        "Loaded unseen ETFs: %d rows, %d symbols (%s)",
+        len(pooled), pooled["symbol"].nunique(),
+        sorted(pooled["symbol"].unique().tolist()),
+    )
+    return pooled
+
+
 def load_cross_market_etfs(
     raw_dir: Path,
     symbols: List[str],

@@ -35,6 +35,15 @@ class GateConfig:
 
 
 @dataclass(frozen=True)
+class DatabaseConfig:
+    """Database connection and backend selection."""
+
+    backend: str = "file"      # "file" | "db" | "hybrid"
+    url: str = ""              # PostgreSQL connection URL
+    url_env: str = ""          # env var name for URL (overrides url)
+
+
+@dataclass(frozen=True)
 class FeatureSelectionConfig:
     """Two-stage feature selection: Pearson filter + XGBoost importance."""
 
@@ -68,6 +77,8 @@ class PipelineConfig:
     unseen_etfs: List[str] = field(
         default_factory=lambda: ["512880.SS", "159919.SZ"]
     )
+    # dashboard_etfs removed — non-core ETFs are now discovered dynamically
+    # and stored in instrument_master (see scripts/db_discover_etfs.py)
     cross_market: List[str] = field(default_factory=lambda: ["SPY", "QQQ", "IEUR"])
     global_risk: List[str] = field(default_factory=lambda: ["VIX", "TNX", "DXY"])
     lookback_windows: List[int] = field(default_factory=lambda: [5, 10, 20])
@@ -75,6 +86,7 @@ class PipelineConfig:
     gate: GateConfig = field(default_factory=GateConfig)
     dashboard_target: DashboardTargetConfig = field(default_factory=DashboardTargetConfig)
     feature_selection: FeatureSelectionConfig = field(default_factory=FeatureSelectionConfig)
+    database: DatabaseConfig = field(default_factory=DatabaseConfig)
 
 
 @dataclass(frozen=True)
@@ -152,6 +164,14 @@ def load_config(path: Path) -> PipelineConfig:
         protected_prefixes=fs.get("protected_prefixes", _default_protected),
     )
 
+    # Database config
+    db = raw.get("database", {})
+    database = DatabaseConfig(
+        backend=db.get("backend", "file"),
+        url=db.get("url", ""),
+        url_env=db.get("url_env", ""),
+    )
+
     return PipelineConfig(
         timezone=proj.get("timezone", "Asia/Shanghai"),
         seed=proj.get("seed", 42),
@@ -163,6 +183,7 @@ def load_config(path: Path) -> PipelineConfig:
         ),
         universe_optional=data.get("universe_optional", []),
         unseen_etfs=data.get("unseen_etfs", ["512880.SS", "159919.SZ"]),
+        # dashboard_etfs removed — discovered dynamically via db_discover_etfs
         cross_market=data.get(
             "cross_market_features", data.get("cross_market", ["SPY", "QQQ", "IEUR"])
         ),
@@ -172,6 +193,7 @@ def load_config(path: Path) -> PipelineConfig:
         gate=gate,
         dashboard_target=dashboard_target,
         feature_selection=feature_selection,
+        database=database,
     )
 
 

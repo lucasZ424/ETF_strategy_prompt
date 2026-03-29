@@ -73,8 +73,46 @@ def _fetch_and_append(ticker: str, csv_path: Path, end_date: str) -> int:
     return n_new
 
 
+def _fetch_to_db(config, end_date: str) -> int:
+    """Fetch latest data for all active instruments into the database.
+
+    Returns total new rows inserted.
+    """
+    from src.data.db import get_engine, get_session_factory, resolve_db_url
+    from src.data.repository import BarRepository, InstrumentRepository
+
+    # Import inline to avoid circular dependency when backend = "file".
+    from scripts.db_fetch import fetch_and_upsert
+
+    db_url = resolve_db_url(config.database.url, config.database.url_env)
+    engine = get_engine(db_url)
+    sf = get_session_factory(engine)
+    bar_repo = BarRepository(sf)
+    inst_repo = InstrumentRepository(sf)
+
+    instruments = inst_repo.list_all(active_only=True)
+    total_new = 0
+    for inst in instruments:
+        yf_ticker = inst.yfinance_ticker or inst.symbol
+        try:
+            n = fetch_and_upsert(inst.symbol, yf_ticker, bar_repo, end_date)
+            total_new += n
+        except Exception as exc:
+            logger.error("  %s: DB fetch failed — %s", inst.symbol, exc)
+    return total_new
+
+
 def fetch_latest_data(config, end_date: str) -> int:
-    """Fetch latest data for all tickers. Returns total new rows."""
+    """Fetch latest data for all tickers. Returns total new rows.
+
+    Dispatches to DB-backed or file-backed fetch depending on
+    ``config.database.backend``.
+    """
+    if config.database.backend in ("db", "hybrid"):
+        logger.info("Using DB-backed fetch path.")
+        return _fetch_to_db(config, end_date)
+
+    # --- Original file-backed path ---
     raw_dir = PROJECT_ROOT / config.raw_dir
     total_new = 0
 

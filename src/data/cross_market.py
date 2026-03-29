@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List
+from typing import Callable, List
 
 import numpy as np
 import pandas as pd
@@ -65,20 +65,40 @@ def _load_and_clean_series(csv_path: Path) -> pd.DataFrame:
     return df[["date", "close"]]
 
 
-def _compute_global_risk_features(raw_dir: Path) -> pd.DataFrame:
+def _compute_global_risk_features(
+    raw_dir: Path,
+    macro_loader: Callable[[str], pd.DataFrame] | None = None,
+) -> pd.DataFrame:
     """Build VIX change, TNX change, DXY return — all on US calendar.
+
+    Parameters
+    ----------
+    raw_dir : Path
+        Directory containing ``cross_market/{VIX,TNX,DXY}.csv``.
+        Ignored when *macro_loader* is provided.
+    macro_loader : callable, optional
+        If provided, called as ``macro_loader("VIX")`` etc. to obtain
+        ``[date, close]`` DataFrames from the DB instead of reading CSVs.
 
     Returns wide DataFrame [date, vix_chg_lag1, us10y_chg_lag1, dxy_ret_lag1].
     """
-    cross_dir = raw_dir / "cross_market"
+    cross_dir = raw_dir / "cross_market" if raw_dir else None
     frames: dict[str, pd.DataFrame] = {}
 
     for name, csv_name in [("vix", "VIX"), ("tnx", "TNX"), ("dxy", "DXY")]:
-        path = cross_dir / f"{csv_name}.csv"
-        if not path.exists():
-            logger.warning("%s.csv not found, skipping global risk features for %s", csv_name, name)
-            continue
-        frames[name] = _load_and_clean_series(path)
+        if macro_loader is not None:
+            try:
+                frames[name] = macro_loader(csv_name)
+            except Exception:
+                logger.warning("macro_loader failed for %s, skipping", csv_name)
+        elif cross_dir is not None:
+            path = cross_dir / f"{csv_name}.csv"
+            if not path.exists():
+                logger.warning("%s.csv not found, skipping global risk features for %s", csv_name, name)
+                continue
+            frames[name] = _load_and_clean_series(path)
+        else:
+            logger.warning("No raw_dir or macro_loader for %s, skipping", csv_name)
 
     if not frames:
         return pd.DataFrame(columns=["date"])
@@ -124,12 +144,19 @@ def align_cross_market_to_china(
     cross_market_df: pd.DataFrame,
     cross_symbols: List[str],
     raw_dir: Path | None = None,
+    macro_loader: Callable[[str], pd.DataFrame] | None = None,
 ) -> pd.DataFrame:
     """Align cross-market ETF returns AND global risk features to China trading dates.
 
     ETF features (1d):  spy_ret_lag1, qqq_ret_lag1, ieur_ret_lag1
     ETF features (10d): spy_ret10d_lag1, ieur_ret10d_lag1
     Global risk:        vix_chg_lag1, us10y_chg_lag1, dxy_ret_lag1
+
+    Parameters
+    ----------
+    macro_loader : callable, optional
+        If provided, used instead of CSV reads for VIX/TNX/DXY.
+        Signature: ``macro_loader("VIX") -> DataFrame[date, close]``.
     """
 
     # ETF returns (1d + 10d)
@@ -138,8 +165,8 @@ def align_cross_market_to_china(
     aligned = _merge_asof_strict(china_dates, etf_rets)
 
     # Global risk features
-    if raw_dir is not None:
-        global_risk = _compute_global_risk_features(raw_dir)
+    if raw_dir is not None or macro_loader is not None:
+        global_risk = _compute_global_risk_features(raw_dir, macro_loader=macro_loader)
         if len(global_risk.columns) > 1:
             global_risk = global_risk.sort_values("date").reset_index(drop=True)
             aligned_risk = _merge_asof_strict(china_dates, global_risk)

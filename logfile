@@ -1,0 +1,246 @@
+2026-03-16 15:43:33.135 CST [9896] LOG:  starting PostgreSQL 17.6 on x86_64-windows, compiled by msvc-19.44.35214, 64-bit
+2026-03-16 15:43:33.137 CST [9896] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-16 15:43:33.137 CST [9896] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-16 15:43:33.166 CST [11192] LOG:  database system was shut down at 2026-03-16 15:41:51 CST
+2026-03-16 15:43:33.178 CST [9896] LOG:  database system is ready to accept connections
+2026-03-16 15:44:15.657 CST [25224] ERROR:  permission denied for schema public at character 15
+2026-03-16 15:44:15.657 CST [25224] STATEMENT:  
+	CREATE TABLE alembic_version (
+		version_num VARCHAR(32) NOT NULL, 
+		CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
+	)
+	
+	
+2026-03-16 15:48:33.167 CST [30904] LOG:  checkpoint starting: time
+2026-03-16 15:52:08.458 CST [30904] LOG:  checkpoint complete: wrote 2007 buffers (12.2%); 0 WAL file(s) added, 0 removed, 1 recycled; write=215.214 s, sync=0.070 s, total=215.292 s; sync files=346, longest=0.002 s, average=0.001 s; distance=21511 kB, estimate=21511 kB; lsn=0/2A7CA10, redo lsn=0/2A7C980
+2026-03-16 16:13:33.524 CST [30904] LOG:  checkpoint starting: time
+2026-03-16 16:13:35.020 CST [30904] LOG:  checkpoint complete: wrote 14 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.488 s, sync=0.004 s, total=1.497 s; sync files=9, longest=0.002 s, average=0.001 s; distance=7 kB, estimate=19361 kB; lsn=0/2A7E950, redo lsn=0/2A7E8F8
+2026-03-16 16:28:33.037 CST [30904] LOG:  checkpoint starting: time
+2026-03-16 16:30:16.208 CST [30904] LOG:  checkpoint complete: wrote 962 buffers (5.9%); 0 WAL file(s) added, 0 removed, 1 recycled; write=103.158 s, sync=0.007 s, total=103.172 s; sync files=18, longest=0.002 s, average=0.001 s; distance=15540 kB, estimate=18978 kB; lsn=0/39ABBF8, redo lsn=0/39ABB68
+2026-03-16 16:56:36.398 CST [31848] LOG:  could not receive data from client: An existing connection was forcibly closed by the remote host.
+	
+2026-03-23 11:13:23.313 CST [16956] LOG:  starting PostgreSQL 17.6 on x86_64-windows, compiled by msvc-19.44.35214, 64-bit
+2026-03-23 11:13:23.316 CST [16956] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-23 11:13:23.316 CST [16956] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-23 11:13:23.374 CST [11624] LOG:  database system was interrupted; last known up at 2026-03-16 16:30:16 CST
+2026-03-23 11:13:25.154 CST [11624] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-03-23 11:13:25.156 CST [11624] LOG:  redo starts at 0/39ABB68
+2026-03-23 11:13:25.156 CST [11624] LOG:  invalid record length at 0/39ABCA8: expected at least 24, got 0
+2026-03-23 11:13:25.156 CST [11624] LOG:  redo done at 0/39ABC70 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2026-03-23 11:13:25.161 CST [26580] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-03-23 11:13:25.170 CST [26580] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.002 s, sync=0.001 s, total=0.013 s; sync files=2, longest=0.001 s, average=0.001 s; distance=0 kB, estimate=0 kB; lsn=0/39ABCA8, redo lsn=0/39ABCA8
+2026-03-23 11:13:25.190 CST [16956] LOG:  database system is ready to accept connections
+2026-03-23 11:43:25.204 CST [26580] LOG:  checkpoint starting: time
+2026-03-23 11:44:10.736 CST [26580] LOG:  checkpoint complete: wrote 418 buffers (2.6%); 0 WAL file(s) added, 0 removed, 1 recycled; write=45.516 s, sync=0.006 s, total=45.532 s; sync files=17, longest=0.002 s, average=0.001 s; distance=6762 kB, estimate=6762 kB; lsn=0/47442C0, redo lsn=0/4046558
+2026-03-23 11:48:25.734 CST [26580] LOG:  checkpoint starting: time
+2026-03-23 11:52:55.063 CST [26580] LOG:  checkpoint complete: wrote 2823 buffers (17.2%); 0 WAL file(s) added, 0 removed, 2 recycled; write=269.313 s, sync=0.008 s, total=269.330 s; sync files=20, longest=0.003 s, average=0.001 s; distance=43137 kB, estimate=43137 kB; lsn=0/84827B8, redo lsn=0/6A66B98
+2026-03-23 11:53:25.075 CST [26580] LOG:  checkpoint starting: time
+2026-03-23 11:57:05.086 CST [26580] LOG:  checkpoint complete: wrote 2021 buffers (12.3%); 0 WAL file(s) added, 0 removed, 2 recycled; write=219.994 s, sync=0.007 s, total=220.012 s; sync files=19, longest=0.003 s, average=0.001 s; distance=30093 kB, estimate=41833 kB; lsn=0/9F8C870, redo lsn=0/87CA2B8
+2026-03-23 11:58:25.089 CST [26580] LOG:  checkpoint starting: time
+2026-03-23 12:02:55.000 CST [26580] LOG:  checkpoint complete: wrote 2503 buffers (15.3%); 0 WAL file(s) added, 0 removed, 2 recycled; write=269.894 s, sync=0.008 s, total=269.912 s; sync files=22, longest=0.002 s, average=0.001 s; distance=32787 kB, estimate=40928 kB; lsn=0/BF10EF0, redo lsn=0/A7CF0F0
+2026-03-23 13:53:13.433 CST [43496] ERROR:  column "u" does not exist at character 16
+2026-03-23 13:53:13.433 CST [43496] STATEMENT:  EXPLAIN SELECT u FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:53:13.701 CST [43496] ERROR:  column "un" does not exist at character 16
+2026-03-23 13:53:13.701 CST [43496] STATEMENT:  EXPLAIN SELECT un FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:53:13.925 CST [43496] ERROR:  column "uni" does not exist at character 16
+2026-03-23 13:53:13.925 CST [43496] STATEMENT:  EXPLAIN SELECT uni FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:53:14.367 CST [43496] ERROR:  column "uniqu" does not exist at character 16
+2026-03-23 13:53:14.367 CST [43496] STATEMENT:  EXPLAIN SELECT uniqu FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:53:16.426 CST [43496] ERROR:  syntax error at or near "FROM" at character 23
+2026-03-23 13:53:16.426 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:53:17.914 CST [43496] ERROR:  syntax error at or near "FROM" at character 24
+2026-03-23 13:53:17.914 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE  FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:53:19.788 CST [43496] ERROR:  syntax error at or near "sy" at character 23
+2026-03-23 13:53:19.788 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE sy FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:53:23.986 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:53:23.986 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE symbol FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:53:26.202 CST [26580] LOG:  checkpoint starting: time
+2026-03-23 13:53:40.740 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:53:40.740 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:54:40.224 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:54:40.224 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:54:45.028 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:54:45.028 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:54:45.029 CST [43496] ERROR:  syntax error at or near ""C:\Users\zhoul\anaconda3\envs\ETF_priceforcast\Library\bin\pg_ctl"" at character 9
+2026-03-23 13:54:45.029 CST [43496] STATEMENT:  EXPLAIN "C:\Users\zhoul\anaconda3\envs\ETF_priceforcast\Library\bin\pg_ctl" -D "C:\Users\zhoul\anaconda3\envs\ETF_priceforcast\var\postgresql" -l logfile start
+	;
+2026-03-23 13:54:56.144 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:54:56.144 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:54:56.144 CST [43496] ERROR:  syntax error at or near ""C:\Users\zhoul\anaconda3\envs\ETF_priceforcast\Library\bin\pg_ctl"" at character 9
+2026-03-23 13:54:56.144 CST [43496] STATEMENT:  EXPLAIN "C:\Users\zhoul\anaconda3\envs\ETF_priceforcast\Library\bin\pg_ctl" -D "C:\Users\zhoul\anaconda3\envs\ETF_priceforcast\var\postgresql" -l logfile star
+	;
+2026-03-23 13:55:00.733 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:55:00.733 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:55:00.734 CST [43496] ERROR:  unterminated quoted identifier at or near ""C:\Users
+	;" at character 9
+2026-03-23 13:55:00.734 CST [43496] STATEMENT:  EXPLAIN "C:\Users
+	;
+2026-03-23 13:55:01.198 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:55:01.198 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:55:01.199 CST [43496] ERROR:  unterminated quoted identifier at or near ""C:\Use
+	;" at character 9
+2026-03-23 13:55:01.199 CST [43496] STATEMENT:  EXPLAIN "C:\Use
+	;
+2026-03-23 13:55:01.963 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:55:01.963 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:55:01.963 CST [43496] ERROR:  unterminated quoted identifier at or near ""C:
+	;" at character 9
+2026-03-23 13:55:01.963 CST [43496] STATEMENT:  EXPLAIN "C:
+	;
+2026-03-23 13:55:02.192 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:55:02.192 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:55:02.192 CST [43496] ERROR:  unterminated quoted identifier at or near ""C
+	;" at character 9
+2026-03-23 13:55:02.192 CST [43496] STATEMENT:  EXPLAIN "C
+	;
+2026-03-23 13:55:02.419 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:55:02.419 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:55:02.419 CST [43496] ERROR:  unterminated quoted identifier at or near ""
+	;" at character 9
+2026-03-23 13:55:02.419 CST [43496] STATEMENT:  EXPLAIN "
+	;
+2026-03-23 13:55:02.667 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:55:02.667 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:55:03.044 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:55:03.044 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:55:12.989 CST [43496] ERROR:  column "uniquesymbol" does not exist at character 16
+2026-03-23 13:55:12.989 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUEsymbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:55:13.893 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:55:13.893 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE(symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:55:16.315 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:55:16.315 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE(symbol) 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:55:19.696 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:55:19.696 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE(symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:55:21.745 CST [43496] ERROR:  column "uniquesymbol" does not exist at character 16
+2026-03-23 13:55:21.745 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUEsymbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:55:22.487 CST [43496] ERROR:  syntax error at or near "symbol" at character 23
+2026-03-23 13:55:22.487 CST [43496] STATEMENT:  EXPLAIN SELECT UNIQUE symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:56:59.920 CST [26580] LOG:  checkpoint complete: wrote 1999 buffers (12.2%); 0 WAL file(s) added, 0 removed, 1 recycled; write=213.698 s, sync=0.008 s, total=213.719 s; sync files=20, longest=0.002 s, average=0.001 s; distance=23815 kB, estimate=39217 kB; lsn=0/BF11100, redo lsn=0/BF11070
+2026-03-23 13:57:23.481 CST [43496] ERROR:  column "un" does not exist at character 16
+2026-03-23 13:57:23.481 CST [43496] STATEMENT:  EXPLAIN SELECT UN symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:57:23.820 CST [43496] ERROR:  column "u" does not exist at character 16
+2026-03-23 13:57:23.820 CST [43496] STATEMENT:  EXPLAIN SELECT U symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:57:24.994 CST [43496] ERROR:  column "d" does not exist at character 16
+2026-03-23 13:57:24.994 CST [43496] STATEMENT:  EXPLAIN SELECT D symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:57:26.928 CST [43496] ERROR:  column "dis" does not exist at character 16
+2026-03-23 13:57:26.928 CST [43496] STATEMENT:  EXPLAIN SELECT DIS symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 13:57:28.450 CST [43496] ERROR:  column "distin" does not exist at character 16
+2026-03-23 13:57:28.450 CST [43496] STATEMENT:  EXPLAIN SELECT DISTIN symbol 
+	FROM "daily_bars" LIMIT 1000;
+2026-03-23 14:21:59.261 CST [19700] LOG:  could not receive data from client: An existing connection was forcibly closed by the remote host.
+	
+2026-03-23 14:30:52.635 CST [44496] ERROR:  relation "query_result_fetch_log" does not exist at character 111
+2026-03-23 14:30:52.635 CST [44496] STATEMENT:  COPY  ( SELECT symbol, fetch_start_date, fetch_end_date, rows_inserted, rows_updated, status, fetched_at FROM query_result_fetch_log ORDER BY fetched_at DESC LIMIT 20 ) TO STDOUT CSV HEADER
+2026-03-24 10:21:04.559 CST [19068] LOG:  starting PostgreSQL 17.6 on x86_64-windows, compiled by msvc-19.44.35214, 64-bit
+2026-03-24 10:21:04.562 CST [19068] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-24 10:21:04.562 CST [19068] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-24 10:21:04.613 CST [12408] LOG:  database system was interrupted; last known up at 2026-03-23 13:56:59 CST
+2026-03-24 10:21:06.659 CST [12408] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-03-24 10:21:06.661 CST [12408] LOG:  redo starts at 0/BF11070
+2026-03-24 10:21:06.661 CST [12408] LOG:  invalid record length at 0/BF111B0: expected at least 24, got 0
+2026-03-24 10:21:06.661 CST [12408] LOG:  redo done at 0/BF11178 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2026-03-24 10:21:06.668 CST [21476] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-03-24 10:21:06.675 CST [21476] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.002 s, sync=0.001 s, total=0.012 s; sync files=2, longest=0.001 s, average=0.001 s; distance=0 kB, estimate=0 kB; lsn=0/BF111B0, redo lsn=0/BF111B0
+2026-03-24 10:21:06.694 CST [19068] LOG:  database system is ready to accept connections
+2026-03-24 10:21:23.208 CST [17340] ERROR:  role "anon" does not exist
+2026-03-24 10:21:23.208 CST [17340] STATEMENT:  REVOKE ALL ON instrument_master FROM anon, authenticated
+2026-03-24 10:26:06.681 CST [21476] LOG:  checkpoint starting: time
+2026-03-24 10:26:21.624 CST [21476] LOG:  checkpoint complete: wrote 140 buffers (0.9%); 0 WAL file(s) added, 0 removed, 0 recycled; write=14.930 s, sync=0.005 s, total=14.943 s; sync files=7, longest=0.002 s, average=0.001 s; distance=8 kB, estimate=8 kB; lsn=0/BF13490, redo lsn=0/BF13400
+2026-03-24 15:19:21.471 CST [35672] LOG:  could not receive data from client: An existing connection was forcibly closed by the remote host.
+	
+2026-03-24 15:19:21.471 CST [35672] LOG:  unexpected EOF on client connection with an open transaction
+2026-03-24 15:48:46.122 CST [31348] LOG:  could not receive data from client: An existing connection was forcibly closed by the remote host.
+	
+2026-03-24 15:48:46.122 CST [31348] LOG:  unexpected EOF on client connection with an open transaction
+2026-03-24 15:59:40.264 CST [41116] LOG:  could not receive data from client: An existing connection was forcibly closed by the remote host.
+	
+2026-03-24 15:59:40.264 CST [41116] LOG:  unexpected EOF on client connection with an open transaction
+2026-03-24 17:21:53.757 CST [19068] LOG:  background worker "logical replication launcher" (PID 18852) was terminated by exception 0x40010004
+2026-03-24 17:21:53.757 CST [19068] HINT:  See C include file "ntstatus.h" for a description of the hexadecimal value.
+2026-03-24 17:21:53.757 CST [19068] LOG:  terminating any other active server processes
+2026-03-24 17:21:53.776 CST [19068] LOG:  all server processes terminated; reinitializing
+2026-03-24 17:21:53.852 CST [19068] LOG:  startup process (PID 35332) was terminated by exception 0xC000026B
+2026-03-24 17:21:53.852 CST [19068] HINT:  See C include file "ntstatus.h" for a description of the hexadecimal value.
+2026-03-24 17:21:53.852 CST [19068] LOG:  aborting startup due to startup process failure
+2026-03-24 17:21:53.854 CST [19068] LOG:  database system is shut down
+2026-03-25 10:09:15.622 CST [43024] LOG:  starting PostgreSQL 17.6 on x86_64-windows, compiled by msvc-19.44.35214, 64-bit
+2026-03-25 10:09:15.624 CST [43024] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-25 10:09:15.624 CST [43024] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-25 10:09:15.658 CST [44984] LOG:  database system was interrupted; last known up at 2026-03-24 10:26:21 CST
+2026-03-25 10:09:17.475 CST [44984] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-03-25 10:09:17.477 CST [44984] LOG:  redo starts at 0/BF13400
+2026-03-25 10:09:17.477 CST [44984] LOG:  invalid record length at 0/BF13540: expected at least 24, got 0
+2026-03-25 10:09:17.477 CST [44984] LOG:  redo done at 0/BF13508 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2026-03-25 10:09:17.485 CST [21320] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-03-25 10:09:17.493 CST [21320] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.002 s, sync=0.002 s, total=0.014 s; sync files=2, longest=0.001 s, average=0.001 s; distance=0 kB, estimate=0 kB; lsn=0/BF13540, redo lsn=0/BF13540
+2026-03-25 10:09:17.512 CST [43024] LOG:  database system is ready to accept connections
+2026-03-25 10:09:59.023 CST [43024] LOG:  background worker "logical replication launcher" (PID 19832) was terminated by exception 0xC000013A
+2026-03-25 10:09:59.023 CST [43024] HINT:  See C include file "ntstatus.h" for a description of the hexadecimal value.
+2026-03-25 10:09:59.023 CST [43024] LOG:  terminating any other active server processes
+2026-03-25 10:09:59.028 CST [43024] LOG:  received fast shutdown request
+^C2026-03-25 10:15:40.446 CST [31008] LOG:  starting PostgreSQL 17.6 on x86_64-windows, compiled by msvc-19.44.35214, 64-bit
+2026-03-25 10:15:40.449 CST [31008] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-25 10:15:40.449 CST [31008] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-25 10:15:40.491 CST [15380] LOG:  database system was interrupted; last known up at 2026-03-25 10:09:17 CST
+2026-03-25 10:15:42.310 CST [15380] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-03-25 10:15:42.311 CST [15380] LOG:  redo starts at 0/BF135B8
+2026-03-25 10:15:42.311 CST [15380] LOG:  invalid record length at 0/BF135F0: expected at least 24, got 0
+2026-03-25 10:15:42.311 CST [15380] LOG:  redo done at 0/BF135B8 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2026-03-25 10:15:42.320 CST [19580] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-03-25 10:15:42.328 CST [19580] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.002 s, sync=0.002 s, total=0.016 s; sync files=2, longest=0.001 s, average=0.001 s; distance=0 kB, estimate=0 kB; lsn=0/BF135F0, redo lsn=0/BF135F0
+2026-03-25 10:15:42.347 CST [31008] LOG:  database system is ready to accept connections
+2026-03-25 10:17:35.765 CST [31008] LOG:  server process (PID 9436) was terminated by exception 0xC000013A
+2026-03-25 10:17:35.765 CST [31008] DETAIL:  Failed process was running: 
+	    SELECT datname
+	    FROM pg_database
+	    WHERE
+	      datistemplate = false
+	      AND has_database_privilege(quote_ident(datname), 'TEMP, CONNECT') = true
+	    ;
+2026-03-25 10:17:35.765 CST [31008] HINT:  See C include file "ntstatus.h" for a description of the hexadecimal value.
+2026-03-25 10:17:35.765 CST [31008] LOG:  terminating any other active server processes
+2026-03-25 10:17:35.769 CST [31008] LOG:  received fast shutdown request
+^C2026-03-25 10:18:41.267 CST [41924] LOG:  starting PostgreSQL 17.6 on x86_64-windows, compiled by msvc-19.44.35214, 64-bit
+2026-03-25 10:18:41.270 CST [41924] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-25 10:18:41.270 CST [41924] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-25 10:18:41.299 CST [21692] LOG:  database system was interrupted; last known up at 2026-03-25 10:15:42 CST
+2026-03-25 10:18:41.465 CST [21692] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-03-25 10:18:41.467 CST [21692] LOG:  redo starts at 0/BF13668
+2026-03-25 10:18:41.467 CST [21692] LOG:  invalid record length at 0/BF136A0: expected at least 24, got 0
+2026-03-25 10:18:41.467 CST [21692] LOG:  redo done at 0/BF13668 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2026-03-25 10:18:41.475 CST [22636] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-03-25 10:18:41.482 CST [22636] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.003 s, sync=0.002 s, total=0.013 s; sync files=2, longest=0.001 s, average=0.001 s; distance=0 kB, estimate=0 kB; lsn=0/BF136A0, redo lsn=0/BF136A0
+2026-03-25 10:18:41.503 CST [41924] LOG:  database system is ready to accept connections
+2026-03-25 10:21:16.363 CST [41924] LOG:  server process (PID 4516) was terminated by exception 0xC000013A
+2026-03-25 10:21:16.363 CST [41924] DETAIL:  Failed process was running: 
+	    SELECT datname
+	    FROM pg_database
+	    WHERE
+	      datistemplate = false
+	      AND has_database_privilege(quote_ident(datname), 'TEMP, CONNECT') = true
+	    ;
+2026-03-25 10:21:16.363 CST [41924] HINT:  See C include file "ntstatus.h" for a description of the hexadecimal value.
+2026-03-25 10:21:16.363 CST [41924] LOG:  terminating any other active server processes
+2026-03-25 10:21:16.368 CST [41924] LOG:  all server processes terminated; reinitializing
+^C

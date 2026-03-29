@@ -18,6 +18,10 @@ universe_core = [
 universe_optional = []
 unseen_etfs = ["512880.SS", "159919.SZ"]
 
+# Non-core China ETFs for dashboard display are discovered dynamically
+# via `python -m scripts.db_discover_etfs` and stored in instrument_master.
+# No hardcoded list needed — the DB is the source of truth.
+
 # Cross-market context features (lagged and timezone-aligned to China decision time).
 cross_market_features = ["SPY", "QQQ", "IEUR"]
 global_risk = ["VIX", "TNX", "DXY"]
@@ -70,6 +74,14 @@ fee_bps = 5.0
 slippage_bps = 3.0
 max_gross_leverage = 1.0
 risk_free_rate = 0.0179
+
+[database]
+# Storage backend: "file" (default, no DB), "db" (PostgreSQL only), "hybrid" (DB first, file fallback)
+backend = "db"
+# Cloud PostgreSQL (AliCloud RDS) — URL read from environment variable
+url_env = "ETF_DB_URL"
+# Set in your shell profile:
+#   $env:ETF_DB_URL = "postgresql://ETF_Dashboard:<password>@pgm-xxx.pg.rds.aliyuncs.com:5432/etf_strategy"
 
 [open_universe]
 enabled = true

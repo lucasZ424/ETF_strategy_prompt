@@ -34,6 +34,13 @@ seaborn>=0.13
 plotly>=5.24
 
 # =========================
+# Database / ORM
+# =========================
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+alembic>=1.13
+
+# =========================
 # Backend API for Grafana integration
 # =========================
 fastapi>=0.115

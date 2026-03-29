@@ -30,7 +30,14 @@ def main() -> None:
     )
 
     config = load_config(args.config)
-    output_paths = run_pipeline(config, PROJECT_ROOT)
+
+    # Construct backend when DB or hybrid mode is active.
+    backend = None
+    if config.database.backend != "file":
+        from src.data.backend import DataBackend
+        backend = DataBackend(config, PROJECT_ROOT)
+
+    output_paths = run_pipeline(config, PROJECT_ROOT, backend=backend)
 
     print("\nPipeline complete. Outputs:")
     for name, path in output_paths.items():

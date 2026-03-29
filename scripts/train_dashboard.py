@@ -38,6 +38,7 @@ from src.models.trainer import (  # noqa: E402
     save_dashboard_bundle,
     train_dashboard_regressor,
 )
+from src.data.backend import DataBackend, StorageBackend  # noqa: E402
 warnings.filterwarnings("ignore")
 logging.basicConfig(
     level=logging.INFO,
@@ -78,14 +79,32 @@ def main() -> None:
     # ---------------------------------------------------------------
     logger.info("=== Building dashboard features from raw data ===")
 
-    china_raw = load_china_etfs(raw_dir, pipe_cfg.universe_core, pipe_cfg.universe_optional)
-    cross_raw = load_cross_market_etfs(raw_dir, pipe_cfg.cross_market)
+    # Use DataBackend when configured for DB; fall back to file loaders
+    backend = None
+    if pipe_cfg.database.backend != "file":
+        backend = DataBackend(pipe_cfg, PROJECT_ROOT)
+
+    use_db = backend is not None and backend.backend != StorageBackend.FILE
+
+    if use_db:
+        logger.info("Loading raw data from DB backend")
+        china_raw = backend.load_china_etfs()
+        cross_raw = backend.load_cross_market_etfs()
+    else:
+        logger.info("Loading raw data from local files")
+        china_raw = load_china_etfs(raw_dir, pipe_cfg.universe_core, pipe_cfg.universe_optional)
+        cross_raw = load_cross_market_etfs(raw_dir, pipe_cfg.cross_market)
+
     china_clean = clean_china_etfs(china_raw)
     cross_clean = clean_cross_market(cross_raw)
 
     china_dates = china_clean["date"].drop_duplicates().sort_values()
+
+    macro_loader = backend.load_macro_series if use_db else None
     cross_aligned = align_cross_market_to_china(
-        china_dates, cross_clean, pipe_cfg.cross_market, raw_dir=raw_dir,
+        china_dates, cross_clean, pipe_cfg.cross_market,
+        raw_dir=raw_dir if not use_db else None,
+        macro_loader=macro_loader,
     )
 
     dash_features = build_dashboard_features(china_clean, cross_aligned)

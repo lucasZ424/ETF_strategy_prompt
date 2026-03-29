@@ -1,4 +1,4 @@
-"""End-to-end data processing pipeline: raw CSV → 4 processed datasets."""
+"""End-to-end data processing pipeline: raw CSV / DB → 4 processed datasets."""
 
 from __future__ import annotations
 
@@ -15,27 +15,45 @@ from src.features.dashboard_features import build_dashboard_features
 logger = logging.getLogger(__name__)
 
 
-def run_pipeline(config: PipelineConfig, project_root: Path) -> dict[str, Path]:
+def run_pipeline(
+    config: PipelineConfig,
+    project_root: Path,
+    backend=None,
+) -> dict[str, Path]:
     """Execute the full data processing pipeline.
 
-    1. Load raw CSVs  2. Clean  3. Align cross-market
-    4. Build shared backbone  5. Emit 3 dataset views  6. Save
+    1. Load raw data (from files or DB)  2. Clean  3. Align cross-market
+    4. Build shared backbone  5. Emit 3 dataset views  6. Save parquets
+
+    Parameters
+    ----------
+    backend : DataBackend | None
+        When provided and its backend is not FILE, raw data is loaded from the
+        database.  When None, the file-based loaders are used (original behavior).
 
     Returns
     -------
     dict mapping dataset name → parquet path
     """
+    from src.data.backend import StorageBackend
 
     raw_dir = project_root / config.raw_dir
     processed_dir = project_root / config.processed_dir
     processed_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Load
-    logger.info("=== Loading China ETFs ===")
-    china_raw = load_china_etfs(raw_dir, config.universe_core, config.universe_optional)
+    use_db = backend is not None and backend.backend != StorageBackend.FILE
 
-    logger.info("=== Loading cross-market ETFs ===")
-    cross_raw = load_cross_market_etfs(raw_dir, config.cross_market)
+    # 1. Load
+    if use_db:
+        logger.info("=== Loading China ETFs (from DB) ===")
+        china_raw = backend.load_china_etfs()
+        logger.info("=== Loading cross-market ETFs (from DB) ===")
+        cross_raw = backend.load_cross_market_etfs()
+    else:
+        logger.info("=== Loading China ETFs ===")
+        china_raw = load_china_etfs(raw_dir, config.universe_core, config.universe_optional)
+        logger.info("=== Loading cross-market ETFs ===")
+        cross_raw = load_cross_market_etfs(raw_dir, config.cross_market)
 
     # 2. Clean
     logger.info("=== Cleaning China ETFs ===")
@@ -47,8 +65,13 @@ def run_pipeline(config: PipelineConfig, project_root: Path) -> dict[str, Path]:
     # 3. Align cross-market to China calendar
     logger.info("=== Aligning cross-market to China calendar ===")
     china_dates = china_clean["date"].drop_duplicates().sort_values()
+    macro_loader = backend.load_macro_series if use_db else None
     cross_aligned = align_cross_market_to_china(
-        china_dates, cross_clean, config.cross_market, raw_dir=raw_dir
+        china_dates,
+        cross_clean,
+        config.cross_market,
+        raw_dir=raw_dir if not use_db else None,
+        macro_loader=macro_loader,
     )
 
     # 4-5. Build shared backbone → 3 dataset views

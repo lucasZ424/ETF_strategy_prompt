@@ -89,7 +89,7 @@ def main() -> None:
     logger.info("=== Building regime labels ===")
     regime_labels = build_regime_labels(regime_df)
 
-    # --- 4. Dashboard targets (1d / 3d / 5d raw close) ---
+    # --- 4. Dashboard targets (1d / 3d / 5d price ratios) ---
     logger.info("=== Building dashboard targets ===")
     dashboard_horizons = config.dashboard_target.horizons
     dashboard_targets = build_dashboard_targets(backbone_df, horizons=dashboard_horizons)
@@ -145,10 +145,10 @@ def main() -> None:
         },
     }
 
-    # Dashboard target stats
-    dash_close_cols = [c for c in dashboard_targets.columns if c.startswith("y_close_")]
+    # Dashboard target stats (ratio targets)
+    dash_ratio_cols = [c for c in dashboard_targets.columns if c.startswith("y_ratio_")]
     dash_stats = {}
-    for col in dash_close_cols:
+    for col in dash_ratio_cols:
         dash_stats[col] = {
             "mean": float(dashboard_targets[col].mean()),
             "std": float(dashboard_targets[col].std()),
@@ -156,7 +156,8 @@ def main() -> None:
     metadata["dashboard_targets"] = {
         "horizons": dashboard_horizons,
         "rows": len(dashboard_targets),
-        "target_columns": dash_close_cols,
+        "target_columns": dash_ratio_cols,
+        "target_type": "price_ratio",
         "stats": dash_stats,
         "symbols": sorted(dashboard_targets["symbol"].unique().tolist()),
     }

@@ -1,0 +1,12 @@
+# Minimal dependencies for dashboard deployment only.
+# Does NOT include training/modeling libs (xgboost, optuna, scikit-learn, etc.)
+# to keep the server image small.
+
+numpy>=2.0
+pandas>=2.2
+pyarrow>=17.0
+python-dotenv>=1.0
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+plotly>=5.24
+streamlit>=1.40

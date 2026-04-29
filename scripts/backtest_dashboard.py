@@ -1,11 +1,11 @@
-"""Backtest dashboard raw close-price models on unseen (or user-specified) ETFs.
+"""Backtest dashboard price-ratio models on unseen (or user-specified) ETFs.
 
 Usage:
     python scripts/backtest_dashboard.py [--config path/to/config.toml]
                                          [--symbols 512880.SS 159919.SZ]
 
-Loads trained dashboard models (1d/3d/5d), builds features & targets for
-the specified ETFs from data/unseen_etfs/, and evaluates prediction quality.
+Loads trained dashboard models (1d/3d/5d ratio), builds features & targets for
+the specified ETFs, predicts ratios, and evaluates on reconstructed raw prices.
 
 Outputs per-ETF and aggregate metrics to outputs/dashboard_backtest/.
 """
@@ -28,6 +28,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.config import load_config, load_model_config  # noqa: E402
 from src.data.cleaner import clean_china_etfs, clean_cross_market  # noqa: E402
 from src.data.cross_market import align_cross_market_to_china  # noqa: E402
+from src.data.backend import DataBackend, StorageBackend  # noqa: E402
 from src.data.loader import (  # noqa: E402
     load_cross_market_etfs,
     load_unseen_etfs,
@@ -70,20 +71,36 @@ def main() -> None:
     # 1. Load unseen ETF data
     # ---------------------------------------------------------------
     symbols = args.symbols or pipe_cfg.unseen_etfs or None
-    logger.info("=== Loading unseen ETFs: %s ===", symbols)
-    unseen_raw = load_unseen_etfs(raw_dir, symbols)
+
+    # Use DataBackend when configured for DB; fall back to file loaders
+    backend = None
+    if pipe_cfg.database.backend != "file":
+        backend = DataBackend(pipe_cfg, PROJECT_ROOT)
+    use_db = backend is not None and backend.backend != StorageBackend.FILE
+
+    logger.info("=== Loading unseen ETFs: %s (backend=%s) ===", symbols, "db" if use_db else "file")
+    if use_db:
+        unseen_raw = backend.load_unseen_etfs(symbols)
+    else:
+        unseen_raw = load_unseen_etfs(raw_dir, symbols)
     unseen_clean = clean_china_etfs(unseen_raw)
 
     # ---------------------------------------------------------------
     # 2. Load cross-market data (shared with training)
     # ---------------------------------------------------------------
     logger.info("=== Loading cross-market data ===")
-    cross_raw = load_cross_market_etfs(raw_dir, pipe_cfg.cross_market)
+    if use_db:
+        cross_raw = backend.load_cross_market_etfs()
+    else:
+        cross_raw = load_cross_market_etfs(raw_dir, pipe_cfg.cross_market)
     cross_clean = clean_cross_market(cross_raw)
 
     unseen_dates = unseen_clean["date"].drop_duplicates().sort_values()
+    macro_loader = backend.load_macro_series if use_db else None
     cross_aligned = align_cross_market_to_china(
-        unseen_dates, cross_clean, pipe_cfg.cross_market, raw_dir=raw_dir,
+        unseen_dates, cross_clean, pipe_cfg.cross_market,
+        raw_dir=raw_dir if not use_db else None,
+        macro_loader=macro_loader,
     )
 
     # ---------------------------------------------------------------
@@ -102,7 +119,7 @@ def main() -> None:
     unseen_targets = build_dashboard_targets(
         unseen_backbone, horizons=pipe_cfg.dashboard_target.horizons,
     )
-    target_cols = [c for c in unseen_targets.columns if c.startswith("y_close_")]
+    target_cols = [c for c in unseen_targets.columns if c.startswith("y_ratio_")]
     logger.info("Target columns: %s", target_cols)
 
     # ---------------------------------------------------------------
@@ -145,11 +162,13 @@ def main() -> None:
     X_unseen = safe_X(merged, feature_manifest)
 
     # ---------------------------------------------------------------
-    # 7. Predict and evaluate
+    # 7. Predict ratios and evaluate on reconstructed prices
     # ---------------------------------------------------------------
     logger.info("=" * 60)
     logger.info("=== Evaluating Dashboard Models on Unseen ETFs ===")
     logger.info("=" * 60)
+
+    backtest_close = merged["close"].values  # current close for inverse transform
 
     eval_report = {
         "unseen_symbols": sorted(merged["symbol"].unique().tolist()),
@@ -163,25 +182,32 @@ def main() -> None:
 
     for tcol in target_cols:
         model = models[tcol]
-        pred_close = model.predict(X_unseen)
-        true_close = merged[tcol].values
+        pred_ratio = model.predict(X_unseen)
+        true_ratio = merged[tcol].values
 
-        # Aggregate metrics
-        agg_metrics = compute_dashboard_metrics(true_close, pred_close)
+        # Inverse transform: reconstruct raw prices
+        pred_price = backtest_close * pred_ratio
+        true_price = backtest_close * true_ratio
+
+        # Evaluate on reconstructed prices (interpretable metrics)
+        agg_metrics = compute_dashboard_metrics(true_price, pred_price)
         eval_report["aggregate"][tcol] = agg_metrics.to_dict()
-        logger.info("AGGREGATE %s: %s", tcol, agg_metrics)
+        logger.info("AGGREGATE %s (price): %s", tcol, agg_metrics)
 
-        pred_df[f"{tcol}_true"] = true_close
-        pred_df[f"{tcol}_pred"] = pred_close
+        price_col = tcol.replace("y_ratio_", "price_")
+        pred_df[f"{price_col}_true"] = true_price
+        pred_df[f"{price_col}_pred"] = pred_price
+        pred_df[f"{tcol}_true"] = true_ratio
+        pred_df[f"{tcol}_pred"] = pred_ratio
 
-        # Per-ETF metrics
+        # Per-ETF metrics (on reconstructed prices)
         eval_report["per_etf"][tcol] = {}
         for sym in sorted(merged["symbol"].unique()):
-            mask = merged["symbol"] == sym
+            mask = (merged["symbol"] == sym).values
             if mask.sum() == 0:
                 continue
             sym_metrics = compute_dashboard_metrics(
-                true_close[mask.values], pred_close[mask.values],
+                true_price[mask], pred_price[mask],
             )
             eval_report["per_etf"][tcol][sym] = sym_metrics.to_dict()
             logger.info("  %s %s: %s", tcol, sym, sym_metrics)
@@ -208,6 +234,7 @@ def main() -> None:
 
         unseen_symbols = sorted(merged["symbol"].unique())
         for tcol in target_cols:
+            price_col = tcol.replace("y_ratio_", "price_")
             for sym in unseen_symbols:
                 sym_df = pred_df[pred_df["symbol"] == sym].sort_values("date")
                 if len(sym_df) == 0:
@@ -215,18 +242,18 @@ def main() -> None:
 
                 fig, axes = plt.subplots(2, 1, figsize=(14, 8), sharex=True)
 
-                # Top: actual vs predicted
+                # Top: actual vs predicted (reconstructed prices)
                 ax1 = axes[0]
-                ax1.plot(sym_df["date"], sym_df[f"{tcol}_true"], label="Actual", linewidth=1)
-                ax1.plot(sym_df["date"], sym_df[f"{tcol}_pred"], label="Predicted", linewidth=1, alpha=0.8)
+                ax1.plot(sym_df["date"], sym_df[f"{price_col}_true"], label="Actual", linewidth=1)
+                ax1.plot(sym_df["date"], sym_df[f"{price_col}_pred"], label="Predicted", linewidth=1, alpha=0.8)
                 ax1.set_ylabel("Close Price")
-                ax1.set_title(f"{sym} — {tcol} Prediction vs Actual")
+                ax1.set_title(f"{sym} — {tcol} Prediction vs Actual (reconstructed price)")
                 ax1.legend()
                 ax1.grid(True, alpha=0.3)
 
                 # Bottom: prediction error
                 ax2 = axes[1]
-                error = sym_df[f"{tcol}_pred"].values - sym_df[f"{tcol}_true"].values
+                error = sym_df[f"{price_col}_pred"].values - sym_df[f"{price_col}_true"].values
                 ax2.bar(sym_df["date"], error, color="steelblue", alpha=0.6, width=2)
                 ax2.axhline(y=0, color="black", linewidth=0.5)
                 ax2.set_ylabel("Error (Pred - Actual)")

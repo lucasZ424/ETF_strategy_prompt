@@ -1,12 +1,12 @@
-"""Dashboard-specific feature builder for raw close-price prediction.
+"""Dashboard-specific feature builder for price-ratio prediction.
 
 Design goals:
-1. Keep one explicit current-price anchor so a pooled model can output
-   meaningful raw close levels across symbols.
-2. Prefer normalized/stationary dynamics for predictive signal:
-   returns, MA/EMA ratios, volatility, candle shape, volume state.
-3. Avoid a large block of direct price-path level lags that can cause the
-   model to collapse into near-identity mapping when target is raw close.
+1. All features are normalised / stationary — the model predicts
+   scale-invariant price ratios (close_{t+H} / close_t ≈ 1.0).
+2. Prefer dynamics: returns, MA/EMA ratios, volatility, candle shape,
+   volume state.  No absolute-price anchors.
+3. Avoid direct price-path level lags that leak absolute scale into
+   a scale-invariant target.
 """
 
 from __future__ import annotations
@@ -57,9 +57,7 @@ def build_dashboard_features(
     g = df.groupby("symbol")
     eps = 1e-8
 
-    # === Block 1: Anchor + return dynamics ===
-    # One explicit anchor for raw-close target level.
-    df["close_anchor"] = df["close"]
+    # === Block 1: Return dynamics ===
     df["log_close"] = np.log(df["close"])
 
     df["ret1_close"] = g["log_close"].diff(1)

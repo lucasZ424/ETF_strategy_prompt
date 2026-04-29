@@ -432,7 +432,7 @@ def train_dashboard_regressor(
 
     Parameters
     ----------
-    y_train / y_val : dict mapping horizon name (e.g. "y_close_1d") to target array.
+    y_train / y_val : dict mapping horizon name (e.g. "y_ratio_1d") to target array.
     """
     models = {}
     best_params_all = {}

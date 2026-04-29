@@ -1,0 +1,54 @@
+{
+  "model_name": "dashboard",
+  "horizons": [
+    "y_ratio_1d",
+    "y_ratio_3d",
+    "y_ratio_5d"
+  ],
+  "best_params": {
+    "y_ratio_1d": {
+      "max_depth": 4,
+      "learning_rate": 0.0742382550364998,
+      "subsample": 0.8352072204970665,
+      "colsample_bytree": 0.6692346180122666,
+      "min_child_weight": 12,
+      "reg_alpha": 1.5500315791199203e-07,
+      "reg_lambda": 5.9716783340774,
+      "gamma": 0.0003688288787636817,
+      "n_estimators": 1000
+    },
+    "y_ratio_3d": {
+      "max_depth": 8,
+      "learning_rate": 0.19202258234116418,
+      "subsample": 0.8682888065530526,
+      "colsample_bytree": 0.5805557096029829,
+      "min_child_weight": 6,
+      "reg_alpha": 0.0965778184820141,
+      "reg_lambda": 0.003305734490323526,
+      "gamma": 4.7659937381356515e-08,
+      "n_estimators": 1000
+    },
+    "y_ratio_5d": {
+      "max_depth": 8,
+      "learning_rate": 0.038366263798344305,
+      "subsample": 0.7664882284069146,
+      "colsample_bytree": 0.551103532984516,
+      "min_child_weight": 14,
+      "reg_alpha": 5.185069443775033e-05,
+      "reg_lambda": 0.00035397153259755283,
+      "gamma": 0.0013331959333649029,
+      "n_estimators": 1000
+    }
+  },
+  "best_iterations": {
+    "y_ratio_1d": 13,
+    "y_ratio_3d": 2,
+    "y_ratio_5d": 21
+  },
+  "val_metrics": {
+    "y_ratio_1d": 0.00018527619574308136,
+    "y_ratio_3d": 0.0005506233708521071,
+    "y_ratio_5d": 0.0009309144607117324
+  },
+  "n_features": 6
+}

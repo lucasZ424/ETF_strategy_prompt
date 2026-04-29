@@ -1,0 +1,15 @@
+[Unit]
+Description=ETF Dashboard (Streamlit)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/etf-dashboard
+EnvironmentFile=/opt/etf-dashboard/.env
+ExecStart=/opt/etf-dashboard/.venv/bin/streamlit run app/dashboard.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

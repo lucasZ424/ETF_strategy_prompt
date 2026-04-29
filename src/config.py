@@ -10,7 +10,7 @@ from typing import List
 
 @dataclass(frozen=True)
 class DashboardTargetConfig:
-    """Dashboard target: multi-horizon raw close-price forecast."""
+    """Dashboard target: multi-horizon price-ratio forecast (y_ratio_Hd = close_{t+H}/close_t)."""
 
     horizons: List[int] = field(default_factory=lambda: [1, 3, 5])
 

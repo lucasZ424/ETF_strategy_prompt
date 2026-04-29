@@ -7,7 +7,7 @@ This repository is a PostgreSQL-backed pilot for China ETF forecasting, strategy
 - Incremental raw-data ingestion into PostgreSQL via `scripts/db_fetch.py`
 - Instrument registry and open-universe onboarding via `instrument_master`
 - Feature pipeline that reads from the DB backend and writes processed parquet datasets
-- Target generation for alpha, triple-barrier gate, regime, and dashboard close-price tasks
+- Target generation for alpha, triple-barrier gate, regime, and dashboard price-ratio tasks
 - XGBoost strategy training and separate dashboard regression training
 - Backtest scripts for both strategy outputs and dashboard models
 
@@ -59,7 +59,7 @@ Once `instrument_master` has been initialized and `ETF_DB_URL` is set, the norma
 
 ```powershell
 # 1. Fetch latest raw data into DB (incremental - only new bars)
-python -m scripts.db_fetch --config configs/china_open_universe_minimal.template.toml
+python scripts/db_fetch.py --config configs/china_open_universe_minimal.template.toml
 
 # 2. Run pipeline (reads raw bars from DB -> writes processed parquets)
 python scripts/run_pipeline.py --config configs/china_open_universe_minimal.template.toml
@@ -67,17 +67,46 @@ python scripts/run_pipeline.py --config configs/china_open_universe_minimal.temp
 # 3. Build targets (reads processed parquets -> writes target parquets)
 python scripts/build_targets.py --config configs/china_open_universe_minimal.template.toml
 
-# 4. Train models
+# 4. Train strategy models (alpha/gate/regime)
 python scripts/train_xgboost.py --config configs/china_open_universe_minimal.template.toml
+
+# 5. Train dashboard models (1d/3d/5d price-ratio regressors, inverse-transformed to raw price for evaluation)
 python scripts/train_dashboard.py --config configs/china_open_universe_minimal.template.toml
 
-# 5. Backtest
+# 6. Backtest strategy models
 python scripts/run_backtest.py --config configs/china_open_universe_minimal.template.toml
+
+# 7. Backtest dashboard models on unseen ETFs
 python scripts/backtest_dashboard.py --config configs/china_open_universe_minimal.template.toml
+
+# 8. Generate diagnostic plots (loss curves, true vs pred scatter)
+python scripts/plot_results.py
+
+# 9. Daily inference - predict price ratios, inverse-transform to raw prices, write to prediction_snapshots
+python -m scripts.predict_dashboard --config configs/china_open_universe_minimal.template.toml
+
+# 10. Launch interactive dashboard (reads from DB, no config needed)
+streamlit run app/dashboard.py
 
 # One-time: discover and onboard all A-share ETFs for dashboard coverage
 python -m scripts.db_discover_etfs --config configs/china_open_universe_minimal.template.toml
 ```
+
+## Interactive Dashboard
+
+The Streamlit dashboard (`app/dashboard.py`) provides three panels:
+
+1. **Price Explorer** — browse historical OHLCV candlestick charts for any ETF (1 filter: symbol)
+2. **Price Predictions** — view predicted vs current close prices with model freshness info (2 filters: symbol + horizon)
+3. **Market Overview** — pie chart showing how many ETFs are predicted increasing, decreasing, or flat
+
+Launch locally:
+
+```powershell
+streamlit run app/dashboard.py
+```
+
+Requires `ETF_DB_URL` to be set (same as the rest of the pipeline).
 
 ## Main Scripts
 
@@ -88,10 +117,12 @@ python -m scripts.db_discover_etfs --config configs/china_open_universe_minimal.
 - `scripts/run_pipeline.py`: build processed feature datasets from raw bars.
 - `scripts/build_targets.py`: build alpha, barrier, regime, and dashboard target datasets.
 - `scripts/train_xgboost.py`: train the strategy models and write evaluation outputs.
-- `scripts/train_dashboard.py`: train dashboard close-price regressors and save dashboard artifacts.
+- `scripts/train_dashboard.py`: train dashboard price-ratio regressors (y_ratio_Hd = close_{t+H}/close_t) and save dashboard artifacts.
 - `scripts/run_backtest.py`: backtest the strategy model outputs on the test set and optional unseen ETFs.
 - `scripts/backtest_dashboard.py`: evaluate dashboard models on unseen ETFs.
-- `scripts/predict_dashboard.py`: daily inference - predict 1d/3d/5d close prices for all eligible ETFs and write to DB.
+- `scripts/plot_results.py`: generate diagnostic plots (loss curves, true vs predicted scatter) from dashboard training outputs.
+- `scripts/predict_dashboard.py`: daily inference - predict 1d/3d/5d price ratios, inverse-transform to raw close prices (predicted_close = current_close × ratio), and write to DB.
+- `app/dashboard.py`: interactive Streamlit dashboard with price explorer, prediction viewer, and market overview.
 
 ## Outputs
 
@@ -104,6 +135,7 @@ Typical artifact locations:
 
 ## Repository Layout
 
+- `app/`: interactive Streamlit dashboard
 - `configs/`: pipeline and model configuration templates
 - `scripts/`: CLI entry points for ingestion, training, and evaluation
 - `src/data/`: DB access, loaders, cleaning, alignment, and pipeline logic
@@ -119,5 +151,6 @@ Typical artifact locations:
 
 - Keep all splits chronological.
 - Keep cross-market features lagged and China-time aligned to avoid leakage.
+- Dashboard models predict **price ratios** (`y_ratio_Hd ≈ 1.0`), not raw close prices. This makes the model scale-invariant — it works on any price level without retraining. Raw prices are reconstructed via `predicted_close = current_close × predicted_ratio` before writing to DB. The DB schema (`prediction_snapshots.y_close_*_pred`) stores the final reconstructed prices.
 - `scripts/db_fetch.py` only works as expected after instruments already exist in `instrument_master`.
 - For development, the DB can be created through `init_db()` paths in the scripts; for stricter schema management, use Alembic.

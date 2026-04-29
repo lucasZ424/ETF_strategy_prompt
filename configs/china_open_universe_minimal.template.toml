@@ -81,7 +81,7 @@ backend = "db"
 # Cloud PostgreSQL (AliCloud RDS) — URL read from environment variable
 url_env = "ETF_DB_URL"
 # Set in your shell profile:
-#   $env:ETF_DB_URL = "postgresql://ETF_Dashboard:<password>@pgm-xxx.pg.rds.aliyuncs.com:5432/etf_strategy"
+#   $env:ETF_DB_URL = "postgresql://ETF_Dashboard:Zlc442400#@pgm-xxx.pg.rds.aliyuncs.com:5432/etf_strategy"
 
 [open_universe]
 enabled = true

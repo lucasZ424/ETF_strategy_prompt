@@ -1,8 +1,8 @@
-"""Daily dashboard inference: predict 1d/3d/5d raw close prices for all eligible ETFs.
+"""Daily dashboard inference: predict 1d/3d/5d close prices for all eligible ETFs.
 
-Loads trained dashboard model bundles, builds features from the latest bars
-in the cloud DB, predicts forward close prices, and writes results to the
-``prediction_snapshots`` table for Grafana consumption.
+Models predict scale-invariant price ratios (y_ratio_Hd ≈ 1.0).
+The inverse transform ``predicted_close = current_close × ratio`` recovers
+raw prices written to the ``prediction_snapshots`` table for Grafana.
 
 Usage::
 
@@ -56,9 +56,10 @@ logger = logging.getLogger(__name__)
 
 # --- Inference thresholds ---
 MIN_RECENT_BARS = 30        # minimum bars needed for feature warmup
-FRESHNESS_CALENDAR_DAYS = 45  # bars must span within this window
+FRESHNESS_CALENDAR_DAYS = 60  # bars must span within this window (~40 trading days)
+PRICE_FLOOR = 0.1             # exclude ETFs trading below this (likely delisted/broken)
 
-HORIZONS = ["y_close_1d", "y_close_3d", "y_close_5d"]
+HORIZONS = ["y_ratio_1d", "y_ratio_3d", "y_ratio_5d"]
 
 
 def _load_models(model_dir: Path) -> tuple[dict, list[str], str]:
@@ -117,26 +118,36 @@ def _get_eligible_symbols(engine, symbols_override: list[str] | None) -> list[st
             logger.warning("Skipped (insufficient recent data): %s", sorted(skipped))
         return eligible
 
-    # All active china_etf instruments meeting freshness criteria
+    # All active china_etf instruments meeting freshness + price floor criteria.
+    # No price ceiling — ratio-based models are scale-invariant.
     with engine.connect() as conn:
         rows = conn.execute(text("""
-            SELECT b.symbol, COUNT(*) AS n_bars, MAX(b.trade_date) AS last_date
-            FROM daily_bars b
-            JOIN instrument_master i ON b.symbol = i.symbol
-            WHERE i.asset_type = 'china_etf'
-              AND i.is_active = TRUE
-              AND b.trade_date >= :cutoff
-            GROUP BY b.symbol
-            HAVING COUNT(*) >= :min_bars
+            SELECT sub.symbol, sub.n_bars, sub.last_date, sub.last_close
+            FROM (
+                SELECT b.symbol,
+                       COUNT(*) AS n_bars,
+                       MAX(b.trade_date) AS last_date,
+                       (ARRAY_AGG(b.close ORDER BY b.trade_date DESC))[1] AS last_close
+                FROM daily_bars b
+                JOIN instrument_master i ON b.symbol = i.symbol
+                WHERE i.asset_type = 'china_etf'
+                  AND i.is_active = TRUE
+                  AND b.trade_date >= :cutoff
+                GROUP BY b.symbol
+                HAVING COUNT(*) >= :min_bars
+            ) sub
+            WHERE sub.last_close >= :price_floor
         """), {
             "cutoff": cutoff_date,
             "min_bars": MIN_RECENT_BARS,
+            "price_floor": PRICE_FLOOR,
         }).fetchall()
 
     symbols = [r[0] for r in rows]
+
     logger.info(
-        "Eligible ETFs: %d (of those in instrument_master with >= %d bars since %s)",
-        len(symbols), MIN_RECENT_BARS, cutoff_date,
+        "Eligible ETFs: %d (>=%d bars since %s, price >= %.1f)",
+        len(symbols), MIN_RECENT_BARS, cutoff_date, PRICE_FLOOR,
     )
     return symbols
 
@@ -205,12 +216,16 @@ def _build_features_and_predict(
 
     X = latest[feature_cols].values
 
-    # Predict
+    # Predict ratios and inverse-transform to raw close prices
     result = latest[["date", "symbol", "close"]].copy()
     result = result.rename(columns={"close": "current_close"})
     for horizon in HORIZONS:
-        result[f"{horizon}_pred"] = models[horizon].predict(X)
-        logger.info("  %s: predicted %d values", horizon, len(X))
+        pred_ratio = models[horizon].predict(X)
+        # Inverse transform: predicted_price = current_close × ratio
+        result[f"{horizon}_pred"] = pred_ratio
+        price_col = horizon.replace("y_ratio_", "y_close_")
+        result[f"{price_col}_pred"] = result["current_close"].values * pred_ratio
+        logger.info("  %s: predicted %d values (mean ratio=%.6f)", horizon, len(X), pred_ratio.mean())
 
     return result
 
@@ -280,7 +295,7 @@ def main() -> None:
     # --- Determine asof_date and data freshness ---
     asof_date = pd.Timestamp(predictions["date"].iloc[0]).date()
 
-    # Reshape for PredictionRepository
+    # Reshape for PredictionRepository — write reconstructed raw prices
     snapshot_df = pd.DataFrame({
         "symbol": predictions["symbol"],
         "current_close": predictions["current_close"],
@@ -305,7 +320,7 @@ def main() -> None:
     print(f"  As-of date    : {asof_date}")
     print(f"  Symbols       : {n_written}")
     print(f"  Features used : {len(feature_cols)}")
-    print("\nSample predictions:")
+    print("\nSample predictions (reconstructed raw prices):")
     sample = predictions.head(5)
     for _, row in sample.iterrows():
         print(
@@ -313,6 +328,9 @@ def main() -> None:
             f"  1d={row['y_close_1d_pred']:.3f}"
             f"  3d={row['y_close_3d_pred']:.3f}"
             f"  5d={row['y_close_5d_pred']:.3f}"
+            f"  (ratios: {row['y_ratio_1d_pred']:.6f}"
+            f" / {row['y_ratio_3d_pred']:.6f}"
+            f" / {row['y_ratio_5d_pred']:.6f})"
         )
 
 

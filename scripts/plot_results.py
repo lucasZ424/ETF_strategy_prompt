@@ -25,7 +25,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 def plot_loss_curves(output_dir: Path, plots_dir: Path) -> None:
     """Train vs Val RMSE per boosting round — one subplot per horizon."""
     # Discover eval history files
-    hist_files = sorted(output_dir.glob("y_close_*_eval_history.json"))
+    hist_files = sorted(output_dir.glob("y_ratio_*_eval_history.json"))
+    if not hist_files:
+        # Fallback for legacy runs with y_close_ naming
+        hist_files = sorted(output_dir.glob("y_close_*_eval_history.json"))
     if not hist_files:
         print("  No eval_history files found, skipping loss curves.")
         return
@@ -195,7 +198,10 @@ def _build_test_predictions(output_dir: Path, report: dict) -> pd.DataFrame | No
 
     # Load targets and merge
     dashboard_targets = pd.read_parquet(processed_dir / "dashboard_targets.parquet")
-    target_cols = [c for c in dashboard_targets.columns if c.startswith("y_close_")]
+    target_cols = [c for c in dashboard_targets.columns if c.startswith("y_ratio_")]
+    if not target_cols:
+        # Fallback for legacy parquets with y_close_ naming
+        target_cols = [c for c in dashboard_targets.columns if c.startswith("y_close_")]
     merge_cols = ["date", "symbol"] + target_cols
     merged = dash_features.merge(dashboard_targets[merge_cols], on=["date", "symbol"], how="inner")
 

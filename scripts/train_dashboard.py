@@ -1,10 +1,11 @@
 """CLI entry point: python scripts/train_dashboard.py [--config path/to/config.toml]
 
-Trains the dashboard price-prediction model (1d / 3d / 5d raw close forecasts).
+Trains the dashboard price-prediction model (1d / 3d / 5d price-ratio forecasts).
 One XGBoost regressor per horizon, using dedicated dashboard features built from
 raw Close (per ETF_feature_engineering_dash.txt).
 
-Targets: y_close_Hd = close_{t+H}  (actual future close price)
+Targets: y_ratio_Hd = close_{t+H} / close_t  (scale-invariant price ratio ≈ 1.0)
+Inference: predicted_close = current_close × y_ratio_pred
 
 Requires: run scripts/run_pipeline.py and scripts/build_targets.py first.
 """
@@ -120,7 +121,7 @@ def main() -> None:
     dashboard_targets = pd.read_parquet(processed_dir / "dashboard_targets.parquet")
     logger.info("Loaded dashboard targets: %d rows", len(dashboard_targets))
 
-    target_cols = [c for c in dashboard_targets.columns if c.startswith("y_close_")]
+    target_cols = [c for c in dashboard_targets.columns if c.startswith("y_ratio_")]
     logger.info("Target columns: %s", target_cols)
 
     # ---------------------------------------------------------------
@@ -141,7 +142,7 @@ def main() -> None:
     # ---------------------------------------------------------------
     fs_cfg = pipe_cfg.feature_selection
     # Use shortest-horizon target as proxy for feature selection
-    proxy_target_col = target_cols[0]  # e.g. y_close_1d
+    proxy_target_col = target_cols[0]  # e.g. y_ratio_1d
     logger.info("=== Running feature selection (proxy target: %s) ===", proxy_target_col)
 
     sel_df = merged[feature_cols].copy()
@@ -191,10 +192,10 @@ def main() -> None:
     y_test = {col: split.test[col].values for col in target_cols}
 
     # ---------------------------------------------------------------
-    # Train on raw close prices
+    # Train on price ratios
     # ---------------------------------------------------------------
     logger.info("=" * 60)
-    logger.info("=== Training Dashboard Price Models (raw close targets) ===")
+    logger.info("=== Training Dashboard Models (price-ratio targets) ===")
     logger.info("=" * 60)
 
     result = train_dashboard_regressor(
@@ -211,6 +212,9 @@ def main() -> None:
     logger.info("=== Evaluating on Test Set ===")
     logger.info("=" * 60)
 
+    # Current close prices for inverse transform (ratio → raw price)
+    test_close = split.test["close"].values
+
     eval_report = {
         "split": {
             "train_rows": len(split.train),
@@ -225,13 +229,17 @@ def main() -> None:
 
     for col in target_cols:
         model = result.models[col]
-        pred_close = model.predict(X_test)
-        true_close = y_test[col]
+        pred_ratio = model.predict(X_test)
+        true_ratio = y_test[col]
 
-        close_metrics = compute_dashboard_metrics(true_close, pred_close)
-        logger.info("Dashboard %s TEST: %s", col, close_metrics)
+        # Inverse transform: reconstruct raw prices for interpretable metrics
+        pred_price = test_close * pred_ratio
+        true_price = test_close * true_ratio
 
-        eval_report["horizons"][col] = close_metrics.to_dict()
+        price_metrics = compute_dashboard_metrics(true_price, pred_price)
+        logger.info("Dashboard %s TEST (price): %s", col, price_metrics)
+
+        eval_report["horizons"][col] = price_metrics.to_dict()
 
     eval_report["feature_selection"] = {
         "pre_selection_count": len(all_feature_cols),
@@ -246,11 +254,17 @@ def main() -> None:
         json.dump(eval_report, f, indent=2, default=str)
     logger.info("Saved evaluation report: %s", report_path)
 
-    # Save test predictions for plotting
+    # Save test predictions for plotting (both ratio and reconstructed price)
     test_pred_df = split.test[["date", "symbol", "close"]].copy()
     for col in target_cols:
-        test_pred_df[f"{col}_true"] = y_test[col]
-        test_pred_df[f"{col}_pred"] = result.models[col].predict(X_test)
+        pred_ratio = result.models[col].predict(X_test)
+        true_ratio = y_test[col]
+        test_pred_df[f"{col}_true"] = true_ratio
+        test_pred_df[f"{col}_pred"] = pred_ratio
+        # Reconstructed prices for Grafana-style evaluation
+        price_col = col.replace("y_ratio_", "price_")
+        test_pred_df[f"{price_col}_true"] = test_close * true_ratio
+        test_pred_df[f"{price_col}_pred"] = test_close * pred_ratio
     test_pred_path = output_dir / "test_predictions.csv"
     test_pred_df.to_csv(test_pred_path, index=False)
     logger.info("Saved test predictions: %s", test_pred_path)
@@ -265,12 +279,12 @@ def main() -> None:
     # Summary
     # ---------------------------------------------------------------
     print("\n" + "=" * 60)
-    print("Dashboard training complete! (raw close-price targets)")
+    print("Dashboard training complete! (price-ratio targets → raw price eval)")
     print("=" * 60)
     for col in target_cols:
         m = eval_report["horizons"][col]
         print(
-            f"\n  {col}:"
+            f"\n  {col} (reconstructed price metrics):"
             f"\n    MSE={m['mse']:.4f}  MAE={m['mae']:.4f}  MAPE={m['mape']:.2f}%  R2={m['r2']:.6f}"
         )
     print(f"\nModel artifacts: {model_dir}")
